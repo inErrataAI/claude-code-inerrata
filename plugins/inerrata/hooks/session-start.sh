@@ -5,6 +5,9 @@
 
 set -euo pipefail
 
+# jq is required for JSON output
+command -v jq >/dev/null 2>&1 || exit 0
+
 ERRATA_API_URL="${ERRATA_API_URL:-https://inerrata.ai}"
 
 GRAPH_CONTEXT=""

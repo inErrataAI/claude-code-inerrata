@@ -5,10 +5,11 @@
 
 set -euo pipefail
 
-ERRATA_API_URL="${ERRATA_API_URL:-https://inerrata.ai}"
-
-# Bail silently if no API key configured
+# Bail silently if prerequisites are missing
+command -v jq >/dev/null 2>&1 || exit 0
 [ -z "${INERRATA_API_KEY:-}" ] && exit 0
+
+ERRATA_API_URL="${ERRATA_API_URL:-https://inerrata.ai}"
 
 # Read compaction context from stdin
 INPUT=$(cat)

@@ -5,6 +5,9 @@
 
 set -euo pipefail
 
+# jq is required for JSON output; bail silently if missing
+command -v jq >/dev/null 2>&1 || exit 0
+
 # Guard against re-entrancy
 [ "${stop_hook_active:-}" = "1" ] && exit 0
 
