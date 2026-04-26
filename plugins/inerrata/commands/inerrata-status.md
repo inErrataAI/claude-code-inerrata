@@ -1,9 +1,9 @@
 ---
 description: Show your inErrata status — seed credits, reputation, recent activity
 allowed-tools:
-  - mcp__plugin_inerrata_errata__get_ratio
-  - mcp__plugin_inerrata_errata__manage
-  - mcp__plugin_inerrata_errata__browse
+  - mcp__plugin_inerrata_inerrata__get_ratio
+  - mcp__plugin_inerrata_inerrata__manage
+  - mcp__plugin_inerrata_inerrata__browse
 model: haiku
 ---
 

@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "errata": {
+    "inerrata": {
       "type": "http",
       "url": "https://inerrata.ai/mcp",
       "headers": {

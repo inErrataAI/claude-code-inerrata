@@ -27,6 +27,12 @@ const P = {
   grayLt:     '#555555',
   grayDk:     '#1a1a1a',
   silver:     '#bdc3c7',
+  // Sonnet Bard
+  blue:       '#3498db',
+  blueDk:     '#2471a3',
+  blueLt:     '#85c1e9',
+  steel:      '#95a5a6',
+  steelDk:    '#7f8c8d',
   // Shared
   black:      '#111111',
   eye:        '#ffffff',
@@ -292,6 +298,142 @@ function haikuThinking1() {
   return f;
 }
 
+// --- 3b. Sonnet Bard Sprite Frames (28x28) --------------------------------
+// Blue armor/tunic, silver trim, bard's cap (chaperon) with feather, rapier
+
+function sonnetIdle0() {
+  const c = P;
+  // Standing upright, rapier at right side, bard's cap with feather
+  return [
+    /*  0 */ [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,c.steel,c.steel,_,_,_,_,_,_,_,_],
+    /*  1 */ [_,_,_,_,_,_,_,_,_,_,_,c.blue,c.blue,c.blue,c.blue,_,_,c.steel,c.eye,c.steelDk,_,_,_,_,_,_,_,_],
+    /*  2 */ [_,_,_,_,_,_,_,_,_,_,c.blue,c.blueDk,c.blue,c.blue,c.blueDk,c.blue,_,_,c.steelDk,_,_,_,_,_,_,_,_,_],
+    /*  3 */ [_,_,_,_,_,_,_,_,_,c.blue,c.blueDk,c.blue,c.blue,c.blue,c.blue,c.blueDk,c.blue,_,_,_,_,_,_,_,_,_,_,_],
+    /*  4 */ [_,_,_,_,_,_,_,_,_,c.blue,c.blue,c.blue,c.blue,c.blue,c.blue,c.blue,c.blue,_,_,_,_,_,_,_,_,_,_,_],
+    /*  5 */ [_,_,_,_,_,_,_,_,_,_,c.skin,c.skin,c.skin,c.skin,c.skin,c.skin,_,_,_,_,_,_,_,_,_,_,_,_],
+    /*  6 */ [_,_,_,_,_,_,_,_,_,_,c.skin,c.eye,c.blue,c.skin,c.blue,c.eye,c.skin,_,_,_,_,_,_,_,_,_,_,_],
+    /*  7 */ [_,_,_,_,_,_,_,_,_,_,c.skin,c.skin,c.skin,c.skinSh,c.skin,c.skin,c.skin,_,_,_,_,_,_,_,_,_,_,_],
+    /*  8 */ [_,_,_,_,_,_,_,_,_,_,_,c.skin,c.skinSh,c.skinSh,c.skinSh,c.skin,_,_,_,_,_,_,_,_,_,_,_,_],
+    /*  9 */ [_,_,_,_,_,_,_,_,_,_,_,_,c.skin,c.skinSh,c.skin,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    /* 10 */ [_,_,_,_,_,_,_,_,c.blue,c.blue,c.steel,c.blue,c.blue,c.blue,c.blue,c.steel,c.blue,c.blue,_,_,_,_,_,_,_,_,_,_],
+    /* 11 */ [_,_,_,_,_,_,_,c.blue,c.blueDk,c.steel,c.blue,c.blue,c.blue,c.blue,c.blue,c.blue,c.steel,c.blueDk,c.blue,_,_,_,_,_,_,_,_,_],
+    /* 12 */ [_,_,_,_,_,_,_,c.blue,c.blue,c.steel,c.blue,c.blueDk,c.blue,c.blue,c.blueDk,c.blue,c.steel,c.blue,c.blue,_,_,_,_,_,_,_,_,_],
+    /* 13 */ [_,_,_,_,_,_,c.skin,c.blue,c.blue,c.steel,c.blue,c.blue,c.blueDk,c.blueDk,c.blue,c.blue,c.steel,c.blue,c.blue,c.skin,_,_,_,_,_,_,_,_],
+    /* 14 */ [_,_,_,_,_,_,c.skin,c.blue,c.blue,c.steel,c.steel,c.steel,c.steel,c.steel,c.steel,c.steel,c.steel,c.blue,c.blue,c.skin,_,_,_,_,_,_,_,_],
+    /* 15 */ [_,_,_,_,_,_,_,c.blue,c.blue,c.blue,c.blue,c.blue,c.blue,c.blue,c.blue,c.blue,c.blue,c.blue,c.blue,_,_,_,_,_,_,_,_,_],
+    /* 16 */ [_,_,_,_,_,_,_,_,c.blue,c.blueDk,c.blue,c.blue,c.blue,c.blue,c.blue,c.blue,c.blueDk,c.blue,_,_,_,_,c.steel,_,_,_,_,_],
+    /* 17 */ [_,_,_,_,_,_,_,_,c.blue,c.blue,c.blueDk,c.blue,c.blue,c.blue,c.blue,c.blueDk,c.blue,c.blue,_,_,_,_,c.steel,_,_,_,_,_],
+    /* 18 */ [_,_,_,_,_,_,_,_,_,c.blueLt,c.blue,c.blue,c.blue,c.blue,c.blue,c.blue,c.blueLt,_,_,_,_,_,c.steel,_,_,_,_,_],
+    /* 19 */ [_,_,_,_,_,_,_,_,_,c.blueLt,c.blueLt,c.blue,c.blue,c.blue,c.blue,c.blueLt,c.blueLt,_,_,_,_,_,c.steel,_,_,_,_,_],
+    /* 20 */ [_,_,_,_,_,_,_,_,_,_,c.blueLt,c.blue,c.blue,c.blue,c.blue,c.blueLt,_,_,_,_,_,_,c.steelDk,_,_,_,_,_],
+    /* 21 */ [_,_,_,_,_,_,_,_,_,_,_,c.blue,c.blueDk,c.blueDk,c.blue,_,_,_,_,_,_,_,c.steelDk,_,_,_,_,_],
+    /* 22 */ [_,_,_,_,_,_,_,_,_,_,_,c.blue,c.blueDk,c.blueDk,c.blue,_,_,_,_,_,_,_,c.steel,_,_,_,_,_],
+    /* 23 */ [_,_,_,_,_,_,_,_,_,_,c.black,c.black,_,_,c.black,c.black,_,_,_,_,_,c.steel,c.blueDk,c.steel,_,_,_,_],
+    /* 24 */ [_,_,_,_,_,_,_,_,_,c.black,c.black,c.black,_,_,c.black,c.black,c.black,_,_,_,_,_,c.steel,_,_,_,_,_],
+    /* 25 */ [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    /* 26 */ [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    /* 27 */ [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  ];
+}
+
+function sonnetIdle1() {
+  // Bob handled by renderer Y offset; frame data identical
+  return sonnetIdle0();
+}
+
+function sonnetAttack0() {
+  // Windup — rapier drawn back, arm extended behind
+  const f = sonnetIdle0();
+  // Pull rapier back (shift blade column left)
+  for (let r = 16; r <= 24; r++) {
+    f[r][22] = _; f[r][23] = _; f[r][24] = _;
+  }
+  f[13][20] = P.skin; f[12][21] = P.steel; f[11][22] = P.steel;
+  f[10][23] = P.steel; f[9][24] = P.steel;
+  return f;
+}
+
+function sonnetAttack1() {
+  // Lunge — rapier thrust forward + flash
+  const f = sonnetIdle0();
+  // Clear old rapier column
+  for (let r = 16; r <= 24; r++) { f[r][22] = _; f[r][23] = _; }
+  // Thrust forward: horizontal blade at row 13
+  f[13][20] = P.skin; f[13][21] = P.steel; f[13][22] = P.steel;
+  f[13][23] = P.steel; f[13][24] = P.steel; f[13][25] = P.eye;
+  // Flash at tip
+  f[12][25] = P.blueLt; f[14][25] = P.blueLt;
+  f[12][26] = P.eye; f[13][26] = P.eye; f[14][26] = P.eye;
+  f[13][27] = P.blueLt;
+  return f;
+}
+
+function sonnetAttack2() {
+  return sonnetIdle0(); // return to idle
+}
+
+function sonnetVictory0() {
+  // Jump — sprite shifted up 3 rows
+  const base = sonnetIdle0();
+  const f = base.map(r => [...r]);
+  for (let r = 0; r < 25; r++) f[r] = r + 3 < 28 ? [...base[r + 3]] : new Array(28).fill(_);
+  for (let r = 25; r < 28; r++) f[r] = new Array(28).fill(_);
+  return f;
+}
+
+function sonnetVictory1() {
+  // Salute — rapier raised overhead
+  const f = sonnetVictory0();
+  f[0][13] = P.steel; f[0][14] = P.eye;
+  f[1][13] = P.steel;
+  f[2][13] = P.steel;
+  f[8][19] = P.skin; f[7][19] = P.skin; f[6][18] = P.steel;
+  return f;
+}
+
+function sonnetVictory2() {
+  return sonnetIdle0(); // settle back
+}
+
+function sonnetDefeated0() {
+  // Slump — sprite shifted down 2
+  const base = sonnetIdle0();
+  const f = [];
+  for (let r = 0; r < 28; r++) {
+    f[r] = r < 2 ? new Array(28).fill(_) : [...base[r - 2]];
+  }
+  // Tilt cap
+  f[3][10] = P.blue; f[3][11] = _; f[3][16] = _;
+  return f;
+}
+
+function sonnetDefeated1() {
+  // Faded version — renderer handles alpha via globalAlpha
+  return sonnetDefeated0();
+}
+
+function sonnetThinking0() {
+  const f = sonnetIdle0();
+  // Slight head tilt right — shift head rows right by 1
+  const headRows = [5, 6, 7, 8, 9];
+  for (const r of headRows) {
+    for (let c = 17; c > 10; c--) f[r][c] = f[r][c - 1];
+    f[r][10] = _;
+  }
+  return f;
+}
+
+function sonnetThinking1() {
+  // Question mark in blue above head
+  const f = sonnetIdle0();
+  f[0][18] = P.blue; f[0][19] = P.blue;
+  f[1][20] = P.blue;
+  f[2][19] = P.blue;
+  f[3][19] = _;
+  f[4][19] = P.blue;
+  return f;
+}
+
 // --- 4. Sprite Registry ---------------------------------------------------
 
 const SPRITES = {
@@ -302,6 +444,14 @@ const SPRITES = {
     defeated: [opusDefeated0, opusDefeated1],
     thinking: [opusThinking0, opusThinking1],
     size: 32,
+  },
+  sonnet: {
+    idle:     [sonnetIdle0, sonnetIdle1],
+    attack:   [sonnetAttack0, sonnetAttack1, sonnetAttack2],
+    victory:  [sonnetVictory0, sonnetVictory1, sonnetVictory2],
+    defeated: [sonnetDefeated0, sonnetDefeated1],
+    thinking: [sonnetThinking0, sonnetThinking1],
+    size: 28,
   },
   haiku: {
     idle:     [haikuIdle0, haikuIdle1],
@@ -521,7 +671,7 @@ function createAnimationController() {
     s.elapsed += dt;
     if (s.elapsed >= s.frameDuration) {
       s.elapsed -= s.frameDuration;
-      const charType = id.startsWith('opus') ? 'opus' : 'haiku';
+      const charType = id.startsWith('opus') ? 'opus' : id.startsWith('sonnet') ? 'sonnet' : 'haiku';
       const totalFrames = SPRITES[charType][s.state].length;
       s.frame++;
       if (s.frame >= totalFrames) {

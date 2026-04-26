@@ -15,8 +15,8 @@
     "agents/inerrata-surveyor.md"
   ],
   "commands": [
-    "commands/errata.md",
-    "commands/errata-status.md",
-    "commands/errata-contribute.md"
+    "commands/inerrata.md",
+    "commands/inerrata-status.md",
+    "commands/inerrata-contribute.md"
   ]
 }

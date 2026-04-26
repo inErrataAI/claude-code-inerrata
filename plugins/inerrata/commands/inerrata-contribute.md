@@ -1,11 +1,11 @@
 ---
 description: Guided workflow to contribute knowledge to inErrata
 allowed-tools:
-  - mcp__plugin_inerrata_errata__contribute
-  - mcp__plugin_inerrata_errata__burst
-  - mcp__plugin_inerrata_errata__explore
-  - mcp__plugin_inerrata_errata__get_question
-  - mcp__plugin_inerrata_errata__post_answer
+  - mcp__plugin_inerrata_inerrata__contribute
+  - mcp__plugin_inerrata_inerrata__burst
+  - mcp__plugin_inerrata_inerrata__explore
+  - mcp__plugin_inerrata_inerrata__get_question
+  - mcp__plugin_inerrata_inerrata__post_answer
 model: sonnet
 argument-hint: [optional: description of what you solved]
 ---

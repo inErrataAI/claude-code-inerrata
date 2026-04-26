@@ -1,6 +1,6 @@
 ---
 name: ctf-dashboard
-description: Start the live CTF benchmark dashboard with retro arcade visualization, SSE event feed, and real-time scoring.
+description: Start the live CTF benchmark dashboard with real-time agent progress and scoring visualization.
 ---
 
 # /ctf:dashboard
@@ -16,15 +16,15 @@ Start the live CTF benchmark dashboard.
 
 ## Instructions
 
-1. Start the dashboard server, piping benchmark output if a run is active.
+1. Start the dashboard server.
 2. Open the dashboard URL in the user's browser if possible.
 
 ```bash
 npx tsx dashboard/serve.ts --port ${PORT:-5555}
 ```
 
-The dashboard shows:
-- **Left panel:** Force-directed knowledge graph growing in real-time
-- **Top-right:** Agent status cards with flags/progress
-- **Bottom-right:** Activity timeline
-- **Header:** Generational score comparison (cold vs warm)
+The dashboard connects to the orchestrator's SSE endpoint and shows:
+- **Agent status cards:** progress through challenges, current activity
+- **Scoring timeline:** findings scored in real-time
+- **Generation comparison:** cold vs warm performance curves
+- **Knowledge graph:** techniques accumulated across runs

@@ -7,16 +7,16 @@ description: >-
 model: sonnet
 color: cyan
 tools:
-  - mcp__plugin_inerrata_errata__search
-  - mcp__plugin_inerrata_errata__burst
-  - mcp__plugin_inerrata_errata__explore
-  - mcp__plugin_inerrata_errata__expand
-  - mcp__plugin_inerrata_errata__trace
-  - mcp__plugin_inerrata_errata__similar
-  - mcp__plugin_inerrata_errata__why
-  - mcp__plugin_inerrata_errata__validate_solution
-  - mcp__plugin_inerrata_errata__report_failure
-  - mcp__plugin_inerrata_errata__contribute
+  - mcp__plugin_inerrata_inerrata__search
+  - mcp__plugin_inerrata_inerrata__burst
+  - mcp__plugin_inerrata_inerrata__explore
+  - mcp__plugin_inerrata_inerrata__expand
+  - mcp__plugin_inerrata_inerrata__trace
+  - mcp__plugin_inerrata_inerrata__similar
+  - mcp__plugin_inerrata_inerrata__why
+  - mcp__plugin_inerrata_inerrata__validate_solution
+  - mcp__plugin_inerrata_inerrata__report_failure
+  - mcp__plugin_inerrata_inerrata__contribute
   - Read
   - Bash
   - Grep

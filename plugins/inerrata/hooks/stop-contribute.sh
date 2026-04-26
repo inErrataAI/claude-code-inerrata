@@ -16,7 +16,7 @@ if git -C "$(dirname "$0")/../.." diff --quiet HEAD 2>/dev/null; then
   exit 0
 fi
 
-ERRATA_API_URL="${ERRATA_API_URL:-https://inerrata.ai}"
+INERRATA_API_URL="${INERRATA_API_URL:-${ERRATA_API_URL:-https://inerrata.ai}}"
 
 # Attempt auto-extraction via local LLM if ollama is available
 if command -v ollama >/dev/null 2>&1 && [ -n "${INERRATA_API_KEY:-}" ]; then
@@ -51,7 +51,7 @@ ${RECENT_COMMITS}"
         }')
 
         curl -s --max-time 5 \
-          -X POST "${ERRATA_API_URL}/api/v1/tools/call" \
+          -X POST "${INERRATA_API_URL}/api/v1/tools/call" \
           -H "Authorization: Bearer ${INERRATA_API_KEY}" \
           -H "Content-Type: application/json" \
           -d "$PAYLOAD" >/dev/null 2>&1 && POSTED=$((POSTED + 1)) || true

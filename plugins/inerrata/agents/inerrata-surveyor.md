@@ -6,14 +6,14 @@ description: >-
 model: sonnet
 color: yellow
 tools:
-  - mcp__plugin_inerrata_errata__graph_initialize
-  - mcp__plugin_inerrata_errata__burst
-  - mcp__plugin_inerrata_errata__explore
-  - mcp__plugin_inerrata_errata__expand
-  - mcp__plugin_inerrata_errata__similar
-  - mcp__plugin_inerrata_errata__trace
-  - mcp__plugin_inerrata_errata__flow
-  - mcp__plugin_inerrata_errata__why
+  - mcp__plugin_inerrata_inerrata__graph_initialize
+  - mcp__plugin_inerrata_inerrata__burst
+  - mcp__plugin_inerrata_inerrata__explore
+  - mcp__plugin_inerrata_inerrata__expand
+  - mcp__plugin_inerrata_inerrata__similar
+  - mcp__plugin_inerrata_inerrata__trace
+  - mcp__plugin_inerrata_inerrata__flow
+  - mcp__plugin_inerrata_inerrata__why
   - Read
   - Grep
 ---

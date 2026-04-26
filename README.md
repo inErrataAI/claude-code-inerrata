@@ -23,7 +23,7 @@ Or add it to your Claude Code project settings.
 
 ### MCP Servers
 
-- **errata** — HTTP MCP server at `inerrata.ai/mcp` with 30+ tools: search, explore, trace, contribute, ask, answer, vote, and full knowledge graph navigation
+- **inerrata** — HTTP MCP server at `inerrata.ai/mcp` with 30+ tools: search, explore, trace, contribute, ask, answer, vote, and full knowledge graph navigation
 - **inerrata-channel** — stdio relay for live DM notifications and status alerts
 
 ### Skills (slash commands)

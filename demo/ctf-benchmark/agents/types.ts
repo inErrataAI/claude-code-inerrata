@@ -1,131 +1,86 @@
 /**
- * agents/types.ts — Shared type definitions for the CTF benchmark agent layer.
- *
- * These mirror the types from the challenge catalog and target harness,
- * kept here so the agents/ module is self-contained.
+ * agents/types.ts — Type definitions for the GNU Security Audit CTF benchmark.
  */
 
-// ---------------------------------------------------------------------------
-// Challenge + Target descriptors
-// ---------------------------------------------------------------------------
+export type Difficulty = 1 | 2 | 3 | 4 | 5;
 
-export type Category =
-  | 'injection'
-  | 'auth-bypass'
-  | 'idor'
-  | 'ssrf'
-  | 'crypto'
-  | 'misc'
-  | 'broken-access'
-  | 'sensitive-data'
-  | 'race-condition'
+export type BugClass =
+  | 'buffer-overflow' | 'heap-overflow' | 'stack-overflow'
+  | 'format-string' | 'command-injection' | 'path-traversal'
+  | 'integer-overflow' | 'use-after-free' | 'null-deref'
+  | 'type-confusion' | 'race-condition' | 'crypto-side-channel'
+  | 'shell-injection' | 'symlink-attack' | 'logic-bug'
+  | 'restricted-bypass' | 'url-parsing';
 
-export type Difficulty = 'trivial' | 'easy' | 'medium' | 'hard' | 'expert'
+export type ModelTier = 'opus' | 'sonnet' | 'haiku';
 
 export interface Challenge {
-  id: string
-  target: string
-  name: string
-  description: string
-  category: Category
-  difficulty: Difficulty
-  points: number
-  /** Validate a submission (flag, payload, evidence). May be async. */
-  validate: (submission: string) => boolean | Promise<boolean>
+  id: string;
+  cve: string;
+  repo: string;
+  repoUrl: string;
+  affectedVersion: string;
+  fixedVersion: string;
+  bugClass: BugClass;
+  difficulty: Difficulty;
+  points: number;
+  briefing: string;
+  groundTruth: {
+    files: string[];
+    functions?: string[];
+    description: string;
+    exploitVector: string;
+    patchHint: string;
+  };
 }
 
-export interface Target {
-  name: string
-  url: string
-  dockerService: string
+export interface AgentConfig {
+  id: string;
+  name: string;
+  model: ModelTier;
+  mode: 'cold' | 'warm';
+  spriteType: 'opus' | 'sonnet' | 'haiku';
 }
 
-// ---------------------------------------------------------------------------
-// Run result
-// ---------------------------------------------------------------------------
+export interface Finding {
+  agentId: string;
+  challengeId: string;
+  timestamp: number;
+  vulnerableFile: string;
+  vulnerableFunction?: string;
+  lineRange?: [number, number];
+  bugClass: BugClass;
+  explanation: string;
+  pocCode?: string;
+  patchSuggestion?: string;
+  crossRepoPattern?: string;
+}
+
+export interface ScoredFinding extends Finding {
+  scores: {
+    location: number;
+    explanation: number;
+    poc: number;
+    patch: number;
+    crossRepo: number;
+    total: number;
+  };
+}
 
 export interface AgentRunResult {
-  flagsCaptured: Array<{
-    challengeId: string
-    capturedAt: Date
-    submission: string
-  }>
-  timeToFirstFlagMs: number | null
-  timeToSolveMs: number | null
-  totalTokensInput: number
-  totalTokensOutput: number
-  /** Tool calls tracked only in warm mode via MCP; 0 for CLI-spawned cold agents */
-  toolCalls: number
-  graphToolCalls: number
-  graphHits: number
-  firstGraphHitAt: Date | null
-  contributeCalls: number
-  traversalPatterns: string[]
-  errors: string[]
-  status: 'completed' | 'failed' | 'timeout'
+  agent: AgentConfig;
+  startTime: number;
+  endTime: number;
+  findings: ScoredFinding[];
+  totalScore: number;
+  challengesAttempted: number;
+  challengesSolved: number;
+  graphQueries: number;
+  graphContributions: number;
 }
 
-// ---------------------------------------------------------------------------
-// SSE event types (emitted by maze server, consumed by dashboard)
-// ---------------------------------------------------------------------------
-
-export interface FlagCapturedEvent {
-  type: 'flag_captured'
-  challengeId: string
-  agentId: string
-  points: number
-  timestamp: string
-}
-
-export interface FlagFailedEvent {
-  type: 'flag_failed'
-  challengeId: string
-  agentId: string
-  timestamp: string
-}
-
-export interface AgentStartedEvent {
-  type: 'agent_started'
-  agentId: string
-  handle: string
-  model: string
-  mode: 'cold' | 'warm'
-  timestamp: string
-}
-
-export interface AgentFinishedEvent {
-  type: 'agent_finished'
-  agentId: string
-  handle: string
-  flagCount: number
-  points: number
-  status: 'completed' | 'failed' | 'timeout'
-  timestamp: string
-}
-
-export interface WaveStartedEvent {
-  type: 'wave_started'
-  wave: number
-  label: string
-  model: string
-  mode: 'cold' | 'warm'
-  agentCount: number
-  timestamp: string
-}
-
-export interface WaveFinishedEvent {
-  type: 'wave_finished'
-  wave: number
-  label: string
-  totalFlags: number
-  totalPoints: number
-  timestamp: string
-}
-
-export type BenchmarkEvent =
-  | FlagCapturedEvent
-  | FlagFailedEvent
-  | AgentStartedEvent
-  | AgentFinishedEvent
-  | WaveStartedEvent
-  | WaveFinishedEvent
+export const MODEL_IDS: Record<ModelTier, string> = {
+  opus: 'claude-opus-4-20250514',
+  sonnet: 'claude-sonnet-4-20250514',
+  haiku: 'claude-haiku-3-5-20241022',
+};

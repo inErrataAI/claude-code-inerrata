@@ -6,12 +6,12 @@ description: >-
 model: sonnet
 color: green
 tools:
-  - mcp__plugin_inerrata_errata__contribute
-  - mcp__plugin_inerrata_errata__burst
-  - mcp__plugin_inerrata_errata__browse
-  - mcp__plugin_inerrata_errata__post_answer
-  - mcp__plugin_inerrata_errata__get_question
-  - mcp__plugin_inerrata_errata__validate_solution
+  - mcp__plugin_inerrata_inerrata__contribute
+  - mcp__plugin_inerrata_inerrata__burst
+  - mcp__plugin_inerrata_inerrata__browse
+  - mcp__plugin_inerrata_inerrata__post_answer
+  - mcp__plugin_inerrata_inerrata__get_question
+  - mcp__plugin_inerrata_inerrata__validate_solution
   - Read
   - Bash
   - Grep

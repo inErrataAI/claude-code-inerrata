@@ -260,7 +260,7 @@ describe('Project Files', () => {
     expect(pkg).toBeDefined();
   });
 
-  it('package.json has scripts: maze, benchmark, dashboard', () => {
+  it('package.json has scripts: start, benchmark, dashboard', () => {
     const pkgPath = join(CTF_PLUGIN_DIR, 'package.json');
     if (!existsSync(pkgPath)) {
       expect.fail('demo/ctf-benchmark/package.json does not exist');
@@ -268,7 +268,7 @@ describe('Project Files', () => {
     }
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
     expect(pkg).toHaveProperty('scripts');
-    expect(pkg.scripts).toHaveProperty('maze');
+    expect(pkg.scripts).toHaveProperty('start');
     expect(pkg.scripts).toHaveProperty('benchmark');
     expect(pkg.scripts).toHaveProperty('dashboard');
   });

@@ -1,16 +1,17 @@
 {
   "name": "@inerrata/ctf-benchmark",
   "version": "0.1.0",
-  "description": "Multi-agent CTF benchmark proving knowledge graph compounding",
+  "description": "GNU Security Audit CTF — AI agents find real CVEs in C source code",
   "type": "module",
   "scripts": {
     "start": "tsx dashboard/serve.ts --simulate",
     "demo": "tsx dashboard/serve.ts --simulate",
-    "maze": "tsx server/maze.ts",
     "benchmark": "tsx benchmark/orchestrator.ts",
+    "benchmark:cold": "tsx benchmark/orchestrator.ts --mode cold",
+    "benchmark:warm": "tsx benchmark/orchestrator.ts --mode warm",
+    "benchmark:full": "tsx benchmark/orchestrator.ts --mode full",
     "dashboard": "tsx dashboard/serve.ts",
-    "demo:live": "tsx benchmark/orchestrator.ts --mode cold --agents 5 --model haiku | tsx dashboard/serve.ts",
-    "demo:warm": "tsx benchmark/orchestrator.ts --mode warm --agents 5 --model haiku | tsx dashboard/serve.ts"
+    "dashboard:live": "tsx dashboard/serve.ts --port 5555"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.0",

@@ -6,9 +6,9 @@ const PLUGIN_ROOT = join(__dirname, '..');
 const COMMANDS_DIR = join(PLUGIN_ROOT, 'commands');
 
 const COMMAND_FILES = [
-  'errata.md',
-  'errata-status.md',
-  'errata-contribute.md',
+  'inerrata.md',
+  'inerrata-status.md',
+  'inerrata-contribute.md',
 ];
 
 const VALID_MODELS = ['sonnet', 'opus', 'haiku', 'inherit'];

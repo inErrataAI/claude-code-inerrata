@@ -144,89 +144,25 @@ describe('CTF Benchmark: Build', { timeout: 60_000 }, () => {
 });
 
 // ---------------------------------------------------------------------------
-// Group 2: Test Suites
+// Group 2: Key Source Files Exist
 // ---------------------------------------------------------------------------
 
-describe('CTF Benchmark: Test Suites', { timeout: 30_000 }, () => {
-  const testFiles = [
-    'server/__tests__/procedural.test.ts',
-    'server/__tests__/integration.test.ts',
-    'server/__tests__/diversity.test.ts',
-    'server/__tests__/review-fixes.test.ts',
+describe('CTF Benchmark: Key Source Files', { timeout: 10_000 }, () => {
+  const sourceFiles = [
+    'challenges/registry.ts',
+    'scoring/judge.ts',
+    'benchmark/orchestrator.ts',
+    'agents/prompts.ts',
+    'agents/types.ts',
   ];
 
-  for (const testFile of testFiles) {
-    it(`${testFile} exits with code 0`, () => {
-      expect(() => {
-        execSync(`npx tsx ${testFile}`, {
-          cwd: CTF_DIR,
-          stdio: 'pipe',
-          timeout: 25_000,
-        });
-      }).not.toThrow();
+  for (const srcFile of sourceFiles) {
+    it(`${srcFile} exists`, () => {
+      const filePath = join(CTF_DIR, srcFile);
+      const { existsSync } = require('fs');
+      expect(existsSync(filePath)).toBe(true);
     });
   }
-});
-
-// ---------------------------------------------------------------------------
-// Group 3: Maze Server Lifecycle
-// ---------------------------------------------------------------------------
-
-describe('CTF Benchmark: Maze Server Lifecycle', { timeout: 15_000 }, () => {
-  let mazeProc: ChildProcess | null = null;
-  let mazePort: number;
-
-  afterEach(async () => {
-    if (mazeProc) {
-      await killProcess(mazeProc);
-      mazeProc = null;
-    }
-  });
-
-  it('spawns, responds to health/meta/events, and shuts down cleanly', async () => {
-    mazePort = await getFreePort();
-
-    const tsxBin = join(CTF_DIR, 'node_modules', '.bin', 'tsx');
-    mazeProc = spawn(tsxBin, ['server/maze.ts', '--seed', 'e2e-test'], {
-      cwd: CTF_DIR,
-      env: { ...process.env, PORT: String(mazePort) },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    spawnedProcesses.push(mazeProc);
-
-    // Wait for the server to announce it's running
-    await waitForStdout(mazeProc, /Maze server running on http:\/\/localhost:\d+/, 8000);
-
-    const base = `http://localhost:${mazePort}`;
-
-    // /health should respond
-    const healthRes = await pollUntilReady(`${base}/health`, 5000);
-    expect(healthRes.ok).toBe(true);
-
-    // /maze/meta should return JSON with a challenges array
-    const metaRes = await fetch(`${base}/maze/meta`);
-    expect(metaRes.ok).toBe(true);
-    const metaJson = await metaRes.json();
-    expect(metaJson).toHaveProperty('challenges');
-    expect(Array.isArray(metaJson.challenges)).toBe(true);
-
-    // /maze/events should return SSE stream
-    const eventsRes = await fetch(`${base}/maze/events`);
-    const contentType = eventsRes.headers.get('content-type') ?? '';
-    expect(contentType).toContain('text/event-stream');
-
-    // SIGTERM and verify clean exit within 3s
-    const exitPromise = new Promise<number | null>((resolve) => {
-      const timeout = setTimeout(() => resolve(null), 3000);
-      mazeProc!.on('exit', (code) => {
-        clearTimeout(timeout);
-        resolve(code);
-      });
-    });
-    mazeProc.kill('SIGTERM');
-    const exitCode = await exitPromise;
-    expect(exitCode).not.toBeNull(); // process exited within 3s
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -244,7 +180,7 @@ describe('CTF Benchmark: Dashboard Lifecycle', { timeout: 15_000 }, () => {
     }
   });
 
-  it('spawns, serves HTML with MAZE RUNNER, serves sprites.js, and shuts down cleanly', async () => {
+  it('spawns, serves HTML with GNU SECURITY AUDIT, serves sprites.js, and shuts down cleanly', async () => {
     dashPort = await getFreePort();
 
     const tsxBin = join(CTF_DIR, 'node_modules', '.bin', 'tsx');
@@ -261,9 +197,9 @@ describe('CTF Benchmark: Dashboard Lifecycle', { timeout: 15_000 }, () => {
     const rootRes = await pollUntilReady(base, 5000);
     expect(rootRes.ok).toBe(true);
 
-    // Verify response body contains "MAZE RUNNER"
+    // Verify response body contains "GNU SECURITY AUDIT"
     const html = await rootRes.text();
-    expect(html).toContain('MAZE RUNNER');
+    expect(html).toContain('GNU SECURITY AUDIT');
 
     // /sprites.js should return javascript content
     const spritesRes = await fetch(`${base}/sprites.js`);

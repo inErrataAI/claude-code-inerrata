@@ -106,7 +106,7 @@ function loadPriorResults() {
         totalPoints: data.agents?.reduce((s: number, a: any) => s + (a.points ?? 0), 0) ?? 0,
         agentCount: data.agents?.length ?? 0,
       })
-    } catch { /* skip bad files */ }
+    } catch (e) { console.warn('[dashboard] Failed to parse results file:', file, e) }
   }
 }
 loadPriorResults()
@@ -218,7 +218,7 @@ function parseOutputFile(path: string) {
 
     state = newState
     loadPriorResults() // refresh on each parse
-  } catch { /* file not ready */ }
+  } catch (e) { console.warn('[dashboard] Error parsing output file:', e) }
 }
 
 if (outputFile) {
@@ -243,7 +243,7 @@ interface SimChallenge {
 interface SimAgent {
   id: string
   handle: string
-  model: 'opus' | 'haiku'
+  model: 'opus' | 'sonnet' | 'haiku'
   solveRate: number
   warmSolveRate: number
   speed: number // ms between tool calls (base)
@@ -251,9 +251,9 @@ interface SimAgent {
 }
 
 const SIM_TOOLS = [
-  'http_request', 'curl', 'read_file', 'analyze_response', 'jq_extract',
-  'sql_inject', 'jwt_forge', 'path_traverse', 'decode_base64', 'http_request',
-  'curl', 'read_file', 'http_request', 'analyze_response', 'curl',
+  'grep_source', 'read_file', 'gcc_compile', 'gdb_inspect', 'cppcheck',
+  'find_pattern', 'git_log', 'git_blame', 'analyze_function', 'read_file',
+  'grep_source', 'python3_poc', 'objdump', 'strace', 'ltrace',
 ]
 
 const GRAPH_TOOLS = ['burst', 'explore', 'trace', 'contribute', 'learn', 'report_finding']
@@ -268,34 +268,56 @@ const DIFFICULTY_TOOL_COSTS: Record<string, [number, number]> = {
 }
 
 async function runSimulation() {
-  // Import procedural engine for real challenge generation
-  const { generateMaze, createRng } = await import('../server/procedural.js')
+  // Inline PRNG — replaces external procedural engine
+  class SimRng {
+    private state: number;
+    constructor(seed: string) {
+      this.state = 0;
+      for (let i = 0; i < seed.length; i++) {
+        this.state = ((this.state << 5) - this.state + seed.charCodeAt(i)) | 0;
+      }
+      if (this.state === 0) this.state = 1;
+    }
+    float(): number {
+      this.state = (this.state * 1103515245 + 12345) & 0x7fffffff;
+      return this.state / 0x7fffffff;
+    }
+    int(min: number, max: number): number {
+      return min + Math.floor(this.float() * (max - min + 1));
+    }
+    hex(len: number): string {
+      let s = '';
+      for (let i = 0; i < len; i++) s += Math.floor(this.float() * 16).toString(16);
+      return s;
+    }
+  }
 
   const seed = 'demo-sim'
-  const rng = createRng(seed + '-sim-engine')
-  const maze = generateMaze(seed)
+  const rng = new SimRng(seed + '-sim-engine')
 
-  // Extract challenge metadata (we don't need the route handlers)
-  const challenges: SimChallenge[] = maze.challenges.map(c => ({
-    id: c.id,
-    name: c.name,
-    difficulty: c.difficulty,
-    points: c.points,
-    category: c.category,
-  }))
+  // Hardcoded challenges for simulation (GNU security audit theme)
+  const challenges: SimChallenge[] = [
+    { id: 'gs-pipe-inject', name: 'Ghostscript Pipe Injection', difficulty: 'easy', points: 500, category: 'Command Injection' },
+    { id: 'gs-format-str', name: 'Ghostscript Format String', difficulty: 'medium', points: 700, category: 'Format String' },
+    { id: 'wget-url-parse', name: 'Wget URL Parsing', difficulty: 'easy', points: 400, category: 'Input Validation' },
+    { id: 'wget-chunked-bof', name: 'Wget Chunked Overflow', difficulty: 'medium', points: 700, category: 'Memory Safety' },
+    { id: 'tar-v7-heap', name: 'Tar V7 Header Overflow', difficulty: 'medium', points: 600, category: 'Memory Safety' },
+    { id: 'tar-path-traversal', name: 'Tar Path Traversal', difficulty: 'easy', points: 500, category: 'Path Traversal' },
+    { id: 'binutils-elf-heap', name: 'Binutils ELF Overflow', difficulty: 'medium', points: 600, category: 'Memory Safety' },
+    { id: 'binutils-objdump-leak', name: 'Binutils Memory Leak', difficulty: 'easy', points: 400, category: 'Logic Bug' },
+    { id: 'bash-shellshock', name: 'Bash Shellshock', difficulty: 'trivial', points: 300, category: 'Command Injection' },
+    { id: 'bash-restricted-bypass', name: 'Bash Restricted Bypass', difficulty: 'medium', points: 700, category: 'Logic Bug' },
+  ]
 
   const AGENTS: SimAgent[] = [
-    { id: 'opus-prime',  handle: 'opus-prime',  model: 'opus',  solveRate: 0.72, warmSolveRate: 0.72, speed: 300,  startDelay: 0 },
-    { id: 'haiku-swift', handle: 'haiku-swift', model: 'haiku', solveRate: 0.42, warmSolveRate: 0.67, speed: 220,  startDelay: 400 },
-    { id: 'haiku-echo',  handle: 'haiku-echo',  model: 'haiku', solveRate: 0.40, warmSolveRate: 0.65, speed: 260,  startDelay: 800 },
-    { id: 'haiku-nova',  handle: 'haiku-nova',  model: 'haiku', solveRate: 0.38, warmSolveRate: 0.64, speed: 240,  startDelay: 1200 },
-    { id: 'haiku-zen',   handle: 'haiku-zen',   model: 'haiku', solveRate: 0.43, warmSolveRate: 0.68, speed: 280,  startDelay: 1600 },
+    { id: 'opus-wizard',  handle: 'opus-wizard',  model: 'opus' as const,   solveRate: 0.75, warmSolveRate: 0.82, speed: 350, startDelay: 0 },
+    { id: 'sonnet-bard',  handle: 'sonnet-bard',  model: 'sonnet' as const, solveRate: 0.58, warmSolveRate: 0.72, speed: 250, startDelay: 200 },
+    { id: 'haiku-rogue',  handle: 'haiku-rogue',  model: 'haiku' as const,  solveRate: 0.35, warmSolveRate: 0.60, speed: 180, startDelay: 400 },
   ]
 
   const WAVE_CONFIG = [
-    { label: 'OPUS COLD',  mode: 'cold', model: 'opus',  agents: ['opus-prime'], durationSec: 25 },
-    { label: 'HAIKU COLD', mode: 'cold', model: 'haiku', agents: ['haiku-swift', 'haiku-echo', 'haiku-nova', 'haiku-zen'], durationSec: 25 },
-    { label: 'HAIKU WARM', mode: 'warm', model: 'haiku', agents: ['haiku-swift', 'haiku-echo', 'haiku-nova', 'haiku-zen'], durationSec: 30 },
+    { label: 'COLD RUN', mode: 'cold', agents: ['opus-wizard', 'sonnet-bard', 'haiku-rogue'], durationSec: 30 },
+    { label: 'WARM RUN', mode: 'warm', agents: ['opus-wizard', 'sonnet-bard', 'haiku-rogue'], durationSec: 35 },
   ]
 
   // Simulation loop (restarts after completing all waves)
@@ -319,7 +341,7 @@ async function runSimulation() {
           runId: rng.hex(8),
           target: `localhost:4444`,
           mode: wave.mode,
-          model: wave.model === 'opus' ? 'claude-opus-4' : 'claude-haiku-3',
+          model: 'opus / sonnet / haiku' + (wave.mode === 'warm' ? ' (+graph)' : ''),
           totalChallenges: challenges.length,
           seed,
         }
@@ -348,7 +370,7 @@ async function runSimulation() {
         const diffOrder: Record<string, number> = { trivial: 0, easy: 1, medium: 2, hard: 3, expert: 4 }
         const agentTargets = new Map<string, { challenge: SimChallenge; toolCost: number; solved: boolean }[]>()
         for (const agent of waveAgents) {
-          const agentRng = createRng(seed + `-${agent.id}-wave${waveNum}`)
+          const agentRng = new SimRng(seed + `-${agent.id}-wave${waveNum}`)
           const solveRate = isWarm ? agent.warmSolveRate : agent.solveRate
           const targets = challenges.map(ch => {
             const [minCost, maxCost] = DIFFICULTY_TOOL_COSTS[ch.difficulty] || [6, 12]
@@ -413,10 +435,11 @@ async function runSimulation() {
                   agentState.status = 'throttled'
                   agentState.currentTool = '429 RATE LIMITED'
                   // Recover after 1-3 seconds
-                  setTimeout(() => {
+                  const recoverTimer = setTimeout(() => {
                     throttled = false
                     if (agentState.status === 'throttled') agentState.status = 'running'
                   }, 1000 + Math.random() * 2000)
+                  agentTimers.push(recoverTimer)
                   scheduleNext()
                   return
                 }
@@ -502,14 +525,18 @@ async function runSimulation() {
         const waveAgentStates = Array.from(state.agents.values())
         const totalFlags = waveAgentStates.reduce((s, a) => s + a.flags.length, 0)
         const totalPoints = waveAgentStates.reduce((s, a) => s + a.points, 0)
-        priorResults.push({
-          runId: state.runId,
-          mode: wave.mode,
-          model: wave.model === 'opus' ? 'claude-opus-4' : 'claude-haiku-3',
-          totalFlags,
-          totalPoints,
-          agentCount: waveAgentStates.length,
-        })
+        // Record per-agent results for the scoreboard
+        for (const agentState of waveAgentStates) {
+          const agentDef = AGENTS.find(a => a.id === agentState.id)
+          priorResults.push({
+            runId: state.runId,
+            mode: wave.mode,
+            model: agentDef ? agentDef.model : 'haiku',
+            totalFlags: agentState.flags.length,
+            totalPoints: agentState.points,
+            agentCount: 1,
+          })
+        }
 
         console.log(`[SIM] Wave ${waveNum} complete: ${totalFlags} flags, ${totalPoints} pts`)
 
@@ -556,47 +583,45 @@ app.get('/api/state', (c) => {
 })
 
 // Graph endpoint — queries inErrata API, or returns simulated graph in sim mode
-const simGraphNodes: Array<{ id: string; type: string; label: string }> = []
-const simGraphEdges: Array<{ source: string; target: string; type: string }> = []
 
 // Seed the simulated graph with domain concepts that grow over time
 const SIM_GRAPH_SEED = {
   domains: [
-    { id: 'dom-injection', type: 'Domain', label: 'SQL Injection' },
-    { id: 'dom-auth', type: 'Domain', label: 'Auth Bypass' },
-    { id: 'dom-idor', type: 'Domain', label: 'IDOR' },
-    { id: 'dom-ssrf', type: 'Domain', label: 'SSRF' },
-    { id: 'dom-crypto', type: 'Domain', label: 'Crypto Weakness' },
-    { id: 'dom-jwt', type: 'Domain', label: 'JWT Forgery' },
+    { id: 'dom-memory', type: 'Domain', label: 'Memory Safety' },
+    { id: 'dom-injection', type: 'Domain', label: 'Command Injection' },
+    { id: 'dom-parsing', type: 'Domain', label: 'Input Parsing' },
     { id: 'dom-traversal', type: 'Domain', label: 'Path Traversal' },
-    { id: 'dom-race', type: 'Domain', label: 'Race Condition' },
+    { id: 'dom-crypto', type: 'Domain', label: 'Crypto Weakness' },
+    { id: 'dom-logic', type: 'Domain', label: 'Logic Bugs' },
+    { id: 'dom-shell', type: 'Domain', label: 'Shell Security' },
+    { id: 'dom-format', type: 'Domain', label: 'Format Strings' },
   ],
   vulns: [
-    { id: 'v-sqli-union', type: 'Vulnerability', label: 'UNION-based SQLi', parent: 'dom-injection' },
-    { id: 'v-sqli-blind', type: 'Vulnerability', label: 'Blind SQLi', parent: 'dom-injection' },
-    { id: 'v-jwt-none', type: 'Vulnerability', label: 'alg:none bypass', parent: 'dom-jwt' },
-    { id: 'v-jwt-weak', type: 'Vulnerability', label: 'Weak JWT secret', parent: 'dom-jwt' },
-    { id: 'v-idor-seq', type: 'Vulnerability', label: 'Sequential ID enum', parent: 'dom-idor' },
-    { id: 'v-ssrf-redir', type: 'Vulnerability', label: 'Redirect-based SSRF', parent: 'dom-ssrf' },
-    { id: 'v-path-dotdot', type: 'Vulnerability', label: '../ traversal', parent: 'dom-traversal' },
-    { id: 'v-race-toctou', type: 'Vulnerability', label: 'TOCTOU race', parent: 'dom-race' },
-    { id: 'v-crypto-ecb', type: 'Vulnerability', label: 'ECB mode leak', parent: 'dom-crypto' },
-    { id: 'v-auth-default', type: 'Vulnerability', label: 'Default credentials', parent: 'dom-auth' },
+    { id: 'v-heap-bof', type: 'Vulnerability', label: 'Heap Buffer Overflow', parent: 'dom-memory' },
+    { id: 'v-stack-bof', type: 'Vulnerability', label: 'Stack Buffer Overflow', parent: 'dom-memory' },
+    { id: 'v-pipe-inject', type: 'Vulnerability', label: 'Pipe Device Injection', parent: 'dom-injection' },
+    { id: 'v-env-inject', type: 'Vulnerability', label: 'Environment Injection', parent: 'dom-injection' },
+    { id: 'v-url-parse', type: 'Vulnerability', label: 'URL Delimiter Confusion', parent: 'dom-parsing' },
+    { id: 'v-header-parse', type: 'Vulnerability', label: 'Archive Header Overflow', parent: 'dom-parsing' },
+    { id: 'v-dotdot', type: 'Vulnerability', label: '../ Path Escape', parent: 'dom-traversal' },
+    { id: 'v-symlink', type: 'Vulnerability', label: 'Symlink Following', parent: 'dom-traversal' },
+    { id: 'v-format-str', type: 'Vulnerability', label: 'Printf Format Vuln', parent: 'dom-format' },
+    { id: 'v-restricted-bypass', type: 'Vulnerability', label: 'Restricted Shell Bypass', parent: 'dom-logic' },
   ],
   solutions: [
-    { id: 's-union-extract', type: 'Solution', label: 'UNION SELECT extraction', parent: 'v-sqli-union' },
-    { id: 's-jwt-forge', type: 'Solution', label: 'Forge admin token', parent: 'v-jwt-none' },
-    { id: 's-idor-brute', type: 'Solution', label: 'Brute-force ID space', parent: 'v-idor-seq' },
-    { id: 's-ssrf-bypass', type: 'Solution', label: 'DNS rebind bypass', parent: 'v-ssrf-redir' },
-    { id: 's-traversal-encode', type: 'Solution', label: 'Double-encode dots', parent: 'v-path-dotdot' },
-    { id: 's-race-parallel', type: 'Solution', label: 'Parallel request race', parent: 'v-race-toctou' },
-    { id: 's-ecb-swap', type: 'Solution', label: 'Block swap attack', parent: 'v-crypto-ecb' },
-    { id: 's-default-admin', type: 'Solution', label: 'admin:admin login', parent: 'v-auth-default' },
+    { id: 's-bounds-check', type: 'Solution', label: 'Add bounds checking', parent: 'v-heap-bof' },
+    { id: 's-sanitize-pipe', type: 'Solution', label: 'Sanitize pipe filenames', parent: 'v-pipe-inject' },
+    { id: 's-url-rfc3986', type: 'Solution', label: 'Strict RFC 3986 parsing', parent: 'v-url-parse' },
+    { id: 's-strip-dotdot', type: 'Solution', label: 'Strip .. from paths', parent: 'v-dotdot' },
+    { id: 's-format-fixed', type: 'Solution', label: 'Use fixed format strings', parent: 'v-format-str' },
+    { id: 's-env-sanitize', type: 'Solution', label: 'Sanitize env functions', parent: 'v-env-inject' },
+    { id: 's-disable-enable-f', type: 'Solution', label: 'Block enable -f in restricted', parent: 'v-restricted-bypass' },
+    { id: 's-header-validate', type: 'Solution', label: 'Validate header lengths', parent: 'v-header-parse' },
   ],
   patterns: [
-    { id: 'p-chained', type: 'Pattern', label: 'Chained exploit', parents: ['v-jwt-none', 'v-idor-seq'] },
-    { id: 'p-recon-first', type: 'Pattern', label: 'Recon → Exploit', parents: ['dom-injection', 'dom-auth'] },
-    { id: 'p-error-based', type: 'Pattern', label: 'Error-based leak', parents: ['v-sqli-blind', 'v-crypto-ecb'] },
+    { id: 'p-c-string-unsafe', type: 'Pattern', label: 'Unsafe C string handling', parents: ['v-heap-bof', 'v-stack-bof', 'v-format-str'] },
+    { id: 'p-input-trust', type: 'Pattern', label: 'Trusting external input', parents: ['v-pipe-inject', 'v-url-parse', 'v-env-inject'] },
+    { id: 'p-path-canonicalize', type: 'Pattern', label: 'Missing path canonicalization', parents: ['v-dotdot', 'v-symlink'] },
   ],
 }
 
@@ -604,8 +629,8 @@ const SIM_GRAPH_SEED = {
 function buildSimGraph() {
   const flags = state.flagTimeline.length
   const mode = state.mode
-  const nodes: typeof simGraphNodes = []
-  const edges: typeof simGraphEdges = []
+  const nodes: Array<{ id: string; type: string; label: string }> = []
+  const edges: Array<{ source: string; target: string; type: string }> = []
 
   // Always show domains (discovered as base map)
   const domainCount = Math.min(SIM_GRAPH_SEED.domains.length, 3 + Math.floor(flags / 2))
@@ -668,7 +693,7 @@ app.get('/api/graph', async (c) => {
     if (res.ok) {
       return c.json(await res.json())
     }
-  } catch { /* API not available */ }
+  } catch (e) { console.warn('[dashboard] Graph API unavailable:', e) }
 
   return c.json({ nodes: [], edges: [] })
 })
@@ -701,7 +726,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>MAZE RUNNER -- CTF BENCHMARK</title>
+<title>GNU SECURITY AUDIT -- CTF BENCHMARK</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
@@ -709,6 +734,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     --bg: #0a0a0f; --bg2: #0e0e18; --bg3: #12121f;
     --neon: #00ff88; --pink: #e94560; --purple: #9b59b6;
     --gold: #f1c40f; --cyan: #44ddff; --dim: #1a1a3e;
+    --blue: #3498db;
     --text: #c8c8d0; --muted: #555568;
     --font: 'Press Start 2P', 'Courier New', monospace;
   }
@@ -749,6 +775,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
   .glow-gold { text-shadow:0 0 6px var(--gold), 0 0 12px rgba(241,196,15,0.3); }
   .glow-cyan { text-shadow:0 0 6px var(--cyan), 0 0 12px rgba(68,221,255,0.3); }
   .glow-purple { text-shadow:0 0 6px var(--purple), 0 0 12px rgba(155,89,182,0.3); }
+  .glow-blue { text-shadow:0 0 6px #3498db, 0 0 12px rgba(52,152,219,0.3); }
 
   /* Title bar */
   #title-bar {
@@ -801,8 +828,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
   #agents-zone::-webkit-scrollbar-thumb { background:var(--dim); border-radius:2px; }
 
   .agent-card {
-    display:flex; align-items:center; gap:8px; padding:6px 8px;
-    margin-bottom:4px; background:var(--bg2); border:1px solid var(--dim);
+    display:flex; align-items:center; gap:8px; padding:10px 12px;
+    margin-bottom:8px; background:var(--bg2); border:1px solid var(--dim);
     border-radius:2px; transition: all 0.3s;
   }
   .agent-card.running { border-color: rgba(0,255,136,0.25); }
@@ -812,19 +839,21 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
   .agent-sprite { flex-shrink:0; border-radius:2px; image-rendering:pixelated; }
   .sprite-opus { width:32px; height:32px; background:var(--pink); box-shadow:0 0 8px rgba(233,69,96,0.4); }
+  .sprite-sonnet { width:28px; height:28px; background:#3498db; box-shadow:0 0 8px rgba(52,152,219,0.4); }
   .sprite-haiku { width:24px; height:24px; background:var(--neon); box-shadow:0 0 8px rgba(0,255,136,0.4); }
 
   .agent-info { flex:1; min-width:0; }
-  .agent-handle { font-size:8px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .agent-action { font-size:7px; color:var(--neon); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .agent-handle { font-size:9px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .agent-action { font-size:8px; color:var(--neon); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .agent-stats { font-size:7px; color:var(--muted); margin-top:2px; }
   .agent-action.throttled-text { color:var(--gold); }
 
-  .agent-progress { width:60px; height:6px; background:#1a1a2e; border-radius:1px; overflow:hidden; flex-shrink:0; }
+  .agent-progress { width:80px; height:8px; background:#1a1a2e; border-radius:1px; overflow:hidden; flex-shrink:0; }
   .agent-progress-fill { height:100%; transition:width 0.5s; background:linear-gradient(90deg, var(--neon), var(--gold), var(--pink)); }
 
-  .agent-flags { font-size:9px; color:var(--gold); min-width:28px; text-align:center; white-space:nowrap; }
-  .agent-pts { font-size:11px; color:var(--pink); min-width:44px; text-align:right; font-weight:bold; }
-  .agent-status-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+  .agent-flags { font-size:11px; color:var(--gold); min-width:28px; text-align:center; white-space:nowrap; }
+  .agent-pts { font-size:13px; color:var(--pink); min-width:44px; text-align:right; font-weight:bold; }
+  .agent-status-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
   .dot-running { background:var(--neon); box-shadow:0 0 4px var(--neon); }
   .dot-throttled { background:var(--gold); box-shadow:0 0 4px var(--gold); }
   .dot-finished { background:#555; }
@@ -838,23 +867,25 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
   /* Scoreboard */
   #scoreboard-zone {
-    border-top:1px solid var(--dim); padding:8px 10px; position:relative;
-    min-height:110px; background:var(--bg2);
+    border-top:1px solid var(--dim); padding:12px 14px; position:relative;
+    min-height:160px; background:var(--bg2);
   }
-  .wave-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:7px; }
-  .wave-label { width:110px; flex-shrink:0; text-align:right; color:var(--muted); letter-spacing:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .wave-bar-track { flex:1; height:12px; background:#0a0a14; border:1px solid var(--dim); border-radius:1px; overflow:hidden; }
+  .wave-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; font-size:8px; }
+  .wave-label { width:130px; flex-shrink:0; text-align:right; color:var(--muted); letter-spacing:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .wave-bar-track { flex:1; height:16px; background:#0a0a14; border:1px solid var(--dim); border-radius:1px; overflow:hidden; }
   .wave-bar-fill { height:100%; transition:width 1s ease-out; border-radius:1px; }
   .wave-bar-fill.opus { background: linear-gradient(90deg, #a02040, var(--pink)); }
+  .wave-bar-fill.sonnet-cold { background: linear-gradient(90deg, #1a5276, #3498db); }
+  .wave-bar-fill.sonnet-warm { background: linear-gradient(90deg, #2471a3, #85c1e9); }
   .wave-bar-fill.haiku-cold { background: linear-gradient(90deg, #333, #666); }
   .wave-bar-fill.haiku-warm { background: linear-gradient(90deg, #006644, var(--neon)); }
   .wave-bar-fill.current { background: linear-gradient(90deg, #886600, var(--gold)); }
-  .wave-stats { width:90px; flex-shrink:0; font-size:7px; color:var(--muted); }
+  .wave-stats { width:100px; flex-shrink:0; font-size:8px; color:var(--muted); }
   .wave-tag { font-size:6px; padding:1px 4px; border-radius:1px; margin-left:4px; }
   .tag-ceiling { background:rgba(233,69,96,0.2); color:var(--pink); }
   .tag-floor { background:rgba(100,100,100,0.2); color:#888; }
   .tag-power { background:rgba(0,255,136,0.2); color:var(--neon); }
-  #compound-metric { font-size:9px; color:var(--neon); text-align:center; margin-top:6px; letter-spacing:1px; }
+  #compound-metric { font-size:11px; color:var(--neon); text-align:center; margin-top:10px; letter-spacing:1px; }
 
   /* Event Ticker */
   #ticker-zone {
@@ -901,8 +932,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 <!-- Title bar -->
 <div id="title-bar">
   <div>
-    <h1 class="glow-pink">MAZE RUNNER</h1>
-    <div class="sub">CTF BENCHMARK // inErrata Knowledge Graph</div>
+    <h1 class="glow-pink">GNU SECURITY AUDIT</h1>
+    <div class="sub">CVE Discovery Benchmark // inErrata Knowledge Graph</div>
   </div>
   <div id="run-meta">CONNECTING...</div>
   <div class="hdr-stats">
@@ -918,11 +949,11 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 <div id="layout">
   <!-- Dungeon Map -->
   <div id="dungeon-zone">
-    <div class="zone-label">DUNGEON MAP</div>
+    <div class="zone-label">KNOWLEDGE GRAPH</div>
     <canvas id="graph-canvas"></canvas>
     <div id="empty-msg">
       <div class="title glow-purple">TERRA INCOGNITA</div>
-      <div class="hint">The dungeon is shrouded in fog...<br>Cold runs begin with an empty knowledge graph</div>
+      <div class="hint">The graph is empty...<br>Cold runs begin with no prior knowledge</div>
     </div>
   </div>
 
@@ -1067,11 +1098,31 @@ function drawGraph() {
   const now = Date.now();
   const N = gNodes.length;
 
+  // Compute viewport transform: auto-fit graph bounding box to canvas
+  var vpScale = 1, vpTx = 0, vpTy = 0;
+  if (N > 1) {
+    var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const n of gNodes) {
+      minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
+      minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
+    }
+    const pad = 80;
+    const gw = (maxX - minX) || 1;
+    const gh = (maxY - minY) || 1;
+    vpScale = Math.min((w - pad * 2) / gw, (h - pad * 2) / gh, 4);
+    var gcx = (minX + maxX) / 2;
+    var gcy = (minY + maxY) / 2;
+    vpTx = w / 2 - gcx * vpScale;
+    vpTy = h / 2 - gcy * vpScale;
+  }
+  function sx(x) { return x * vpScale + vpTx; }
+  function sy(y) { return y * vpScale + vpTy; }
+
   // Edges as dim corridors
   for (const e of gEdges) {
     ctx.beginPath();
-    ctx.moveTo(e.source.x, e.source.y);
-    ctx.lineTo(e.target.x, e.target.y);
+    ctx.moveTo(sx(e.source.x), sy(e.source.y));
+    ctx.lineTo(sx(e.target.x), sy(e.target.y));
     ctx.strokeStyle = 'rgba(40,40,80,0.5)';
     ctx.lineWidth = 1;
     ctx.stroke();
@@ -1086,19 +1137,19 @@ function drawGraph() {
     const r = n.r * pulse;
 
     // Outer glow
-    const grad = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, r * 4);
+    const grad = ctx.createRadialGradient(sx(n.x), sy(n.y), 0, sx(n.x), sy(n.y), r * 4);
     grad.addColorStop(0, color + (isFlashing ? '44' : '18'));
     grad.addColorStop(1, 'transparent');
-    ctx.beginPath(); ctx.arc(n.x, n.y, r * 4, 0, Math.PI * 2);
+    ctx.beginPath(); ctx.arc(sx(n.x), sy(n.y), r * 4, 0, Math.PI * 2);
     ctx.fillStyle = grad; ctx.fill();
 
     // Core
-    ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+    ctx.beginPath(); ctx.arc(sx(n.x), sy(n.y), r, 0, Math.PI * 2);
     ctx.fillStyle = color; ctx.fill();
 
     // Flash ring for new nodes
     if (isFlashing) {
-      ctx.beginPath(); ctx.arc(n.x, n.y, r + 4 + flashAge * 0.005, 0, Math.PI * 2);
+      ctx.beginPath(); ctx.arc(sx(n.x), sy(n.y), r + 4 + flashAge * 0.005, 0, Math.PI * 2);
       const alpha = Math.max(0, 80 - flashAge * 0.04);
       ctx.strokeStyle = color + Math.round(alpha).toString(16).padStart(2, '0');
       ctx.lineWidth = 1.5; ctx.stroke();
@@ -1108,7 +1159,7 @@ function drawGraph() {
     if (N < 80) {
       ctx.fillStyle = '#444';
       ctx.font = '7px monospace';
-      ctx.fillText((n.label || '').slice(0, 18), n.x + r + 4, n.y + 3);
+      ctx.fillText((n.label || '').slice(0, 18), sx(n.x) + r + 4, sy(n.y) + 3);
     }
   }
 
@@ -1122,13 +1173,13 @@ function drawGraph() {
     ctx.save();
     ctx.shadowColor = pos.color || '#fff';
     ctx.shadowBlur = 8;
-    ctx.beginPath(); ctx.arc(pos.x, pos.y, 5, 0, Math.PI * 2);
+    ctx.beginPath(); ctx.arc(sx(pos.x), sy(pos.y), 5, 0, Math.PI * 2);
     ctx.fillStyle = pos.color || '#fff';
     ctx.fill();
     ctx.restore();
   }
 
-  // Legend
+  // Legend (fixed screen position — not transformed)
   ctx.font = '7px "Press Start 2P", monospace';
   let ly = 28;
   const seen = new Set(gNodes.map(n => n.type));
@@ -1164,12 +1215,19 @@ if (window.SpritesEngine) {
   _spriteRenderer = window.SpritesEngine.createSpriteRenderer(_spriteCtx);
 }
 
+function getCharType(agent) {
+  const h = (agent.handle || agent.id || '').toLowerCase();
+  if (h.includes('opus')) return 'opus';
+  if (h.includes('sonnet')) return 'sonnet';
+  return 'haiku';
+}
+
 function getSpriteDataURL(charType, animState, frame) {
   const key = charType + ':' + animState + ':' + frame;
   if (_spriteDataURLCache[key]) return _spriteDataURLCache[key];
   if (!_spriteRenderer) return null;
-  const size = charType === 'opus' ? 32 : 24;
-  const scale = charType === 'opus' ? 3 : 4;
+  const size = charType === 'opus' ? 32 : charType === 'sonnet' ? 28 : 24;
+  const scale = charType === 'opus' ? 3 : charType === 'sonnet' ? 3 : 4;
   const dim = size * scale;
   _spriteCanvas.width = dim; _spriteCanvas.height = dim;
   _spriteCtx.clearRect(0, 0, dim, dim);
@@ -1195,8 +1253,7 @@ function renderAgents(agents, totalChallenges) {
   list.innerHTML = agents.map((a, i) => {
     const callPct = Math.min(100, Math.round((a.toolCalls / (a.maxCalls || 100)) * 100));
     const isFlash = flashTimers[a.id];
-    const isOpus = (a.handle || a.id || '').toLowerCase().includes('opus') || currentModel.toLowerCase().includes('opus');
-    const charType = isOpus ? 'opus' : 'haiku';
+    const charType = getCharType(a);
     const animState = agentSpriteState(a);
     const spriteURL = getSpriteDataURL(charType, animState, _spriteAnimFrame);
     const dotClass = 'dot-' + a.status;
@@ -1205,12 +1262,17 @@ function renderAgents(agents, totalChallenges) {
     const nFlags = a.flags ? a.flags.length : 0;
     const flagStr = nFlags > 0 ? '\\u{1F3F4}'.repeat(Math.min(nFlags, 5)) + (nFlags > 5 ? '+' : '') : '';
 
+    const spriteSize = charType === 'opus' ? 48 : charType === 'sonnet' ? 42 : 40;
+    const spriteTitle = charType === 'opus' ? 'Wizard (Opus)' : charType === 'sonnet' ? 'Bard (Sonnet)' : 'Rogue (Haiku)';
+    const spriteClass = 'sprite-' + charType;
+    const dotColor = charType === 'opus' ? '#e94560' : charType === 'sonnet' ? '#3498db' : '#00ff88';
+
     // Track agent dot position on dungeon map
     if (gNodes.length > 0) {
       const tIdx = (i * 7 + a.toolCalls) % gNodes.length;
       const targetNode = gNodes[tIdx];
       if (!agentPositions[a.id]) {
-        agentPositions[a.id] = { x: targetNode.x, y: targetNode.y, color: isOpus ? '#e94560' : '#00ff88' };
+        agentPositions[a.id] = { x: targetNode.x, y: targetNode.y, color: dotColor };
       }
       const ap = agentPositions[a.id];
       ap.x += (targetNode.x - ap.x) * 0.05;
@@ -1218,14 +1280,18 @@ function renderAgents(agents, totalChallenges) {
     }
 
     const spriteHTML = spriteURL
-      ? '<img class="agent-sprite" src="' + spriteURL + '" style="width:' + (isOpus ? '48' : '40') + 'px;height:' + (isOpus ? '48' : '40') + 'px;image-rendering:pixelated;" title="' + (isOpus ? 'Wizard (Opus)' : 'Rogue (Haiku)') + '">'
-      : '<div class="agent-sprite ' + (isOpus ? 'sprite-opus' : 'sprite-haiku') + '" title="' + (isOpus ? 'Wizard (Opus)' : 'Rogue (Haiku)') + '"></div>';
+      ? '<img class="agent-sprite" src="' + spriteURL + '" style="width:' + spriteSize + 'px;height:' + spriteSize + 'px;image-rendering:pixelated;" title="' + spriteTitle + '">'
+      : '<div class="agent-sprite ' + spriteClass + '" title="' + spriteTitle + '"></div>';
 
     return '<div class="agent-card ' + a.status + (isFlash ? ' flash' : '') + '">'
       + spriteHTML
       + '<div class="agent-info">'
       + '<div class="agent-handle">Agent ' + (i+1) + ' <span style="color:var(--muted)">(' + (a.handle || a.shortId || a.id).slice(0,10) + ')</span></div>'
       + '<div class="' + actionClass + '">' + actionText + '</div>'
+      + '<div class="agent-stats">' + a.toolCalls + ' calls'
+      + (a.graphHits > 0 ? ' / ' + a.graphHits + ' graph' : '')
+      + (a.errors > 0 ? ' / <span style="color:var(--pink)">' + a.errors + ' err</span>' : '')
+      + '</div>'
       + '</div>'
       + '<div class="agent-progress"><div class="agent-progress-fill" style="width:' + callPct + '%"></div></div>'
       + '<div class="agent-flags">' + flagStr + ' ' + nFlags + '</div>'
@@ -1242,49 +1308,68 @@ function renderScoreboard(priorResults, currentAgents, curMode, curModel) {
   const container = document.getElementById('scoreboard-bars');
   const metricEl = document.getElementById('compound-metric');
 
-  let opusCold = null, haikuCold = null, haikuWarm = null;
+  // Collect per-agent-per-wave data
+  var byKey = {};
   for (const r of (priorResults || [])) {
     const m = (r.model || '').toLowerCase();
     const md = (r.mode || '').toLowerCase();
-    if (m.includes('opus') && md.includes('cold')) opusCold = r;
-    else if (m.includes('haiku') && md.includes('cold')) haikuCold = r;
-    else if (m.includes('haiku') && md.includes('warm')) haikuWarm = r;
+    var agent = m.includes('opus') ? 'opus' : m.includes('sonnet') ? 'sonnet' : 'haiku';
+    var wave = md.includes('warm') ? 'warm' : 'cold';
+    var key = wave + ':' + agent;
+    if (!byKey[key]) byKey[key] = { totalPoints: 0, totalFlags: 0 };
+    byKey[key].totalPoints += r.totalPoints;
+    byKey[key].totalFlags += r.totalFlags;
   }
 
-  const currentPts = (currentAgents || []).reduce((s, a) => s + (a.points || 0), 0);
-  const currentFlags = (currentAgents || []).reduce((s, a) => s + (a.flags ? a.flags.length : 0), 0);
-
-  const allPts = [opusCold ? opusCold.totalPoints : 0, haikuCold ? haikuCold.totalPoints : 0, haikuWarm ? haikuWarm.totalPoints : 0, currentPts].filter(Boolean);
-  const maxPts = Math.max(600, Math.max.apply(null, allPts.length ? allPts : [600]));
+  var allPts = Object.keys(byKey).map(function(k) { return byKey[k].totalPoints; }).filter(Boolean);
+  var maxPts = Math.max(600, Math.max.apply(null, allPts.length ? allPts : [600]));
 
   function waveBar(label, points, flags, fillClass, tagText, tagClass) {
-    const pct = Math.min(100, Math.round((points / maxPts) * 100));
+    var pct = Math.min(100, Math.round((points / maxPts) * 100));
     return '<div class="wave-row">'
       + '<div class="wave-label">' + label + '</div>'
       + '<div class="wave-bar-track"><div class="wave-bar-fill ' + fillClass + '" style="width:' + pct + '%"></div></div>'
-      + '<div class="wave-stats">' + points + '/' + maxPts + 'pts'
+      + '<div class="wave-stats">' + points + 'pts'
       + (flags != null ? ' ' + flags + 'f' : '')
       + (tagText ? '<span class="wave-tag ' + tagClass + '">' + tagText + '</span>' : '')
       + '</div></div>';
   }
 
-  let html = '';
-  if (opusCold) html += waveBar('WAVE 1: OPUS COLD', opusCold.totalPoints, opusCold.totalFlags, 'opus', 'CEILING', 'tag-ceiling');
-  if (haikuCold) html += waveBar('WAVE 2: HAIKU COLD', haikuCold.totalPoints, haikuCold.totalFlags, 'haiku-cold', 'FLOOR', 'tag-floor');
-  if (haikuWarm) html += waveBar('WAVE 3: HAIKU WARM', haikuWarm.totalPoints, haikuWarm.totalFlags, 'haiku-warm', 'GRAPH', 'tag-power');
-  if (curMode && currentPts > 0) {
-    html += waveBar('CURRENT: ' + (curMode + ' ' + curModel).toUpperCase(), currentPts, currentFlags, 'current', 'LIVE', 'tag-ceiling');
+  var html = '';
+  var rows = [
+    { key: 'cold:opus',   label: 'COLD: OPUS',   fill: 'opus',        tag: '', tagC: '' },
+    { key: 'cold:sonnet', label: 'COLD: SONNET', fill: 'sonnet-cold', tag: '', tagC: '' },
+    { key: 'cold:haiku',  label: 'COLD: HAIKU',  fill: 'haiku-cold',  tag: '', tagC: '' },
+    { key: 'warm:opus',   label: 'WARM: OPUS',   fill: 'opus',        tag: '+GRAPH', tagC: 'tag-power' },
+    { key: 'warm:sonnet', label: 'WARM: SONNET', fill: 'sonnet-warm', tag: '+GRAPH', tagC: 'tag-power' },
+    { key: 'warm:haiku',  label: 'WARM: HAIKU',  fill: 'haiku-warm',  tag: '+GRAPH', tagC: 'tag-power' },
+  ];
+  for (var ri = 0; ri < rows.length; ri++) {
+    var row = rows[ri];
+    var d = byKey[row.key];
+    if (d) html += waveBar(row.label, d.totalPoints, d.totalFlags, row.fill, row.tag, row.tagC);
   }
-  if (!html && !currentPts) {
+
+  if (!html) {
     html = '<div style="color:var(--muted);text-align:center;padding:10px;font-size:7px;">AWAITING WAVE DATA...</div>';
   }
-
   container.innerHTML = html;
 
-  if (haikuCold && haikuWarm && haikuCold.totalPoints > 0) {
-    const gain = ((haikuWarm.totalPoints - haikuCold.totalPoints) / haikuCold.totalPoints * 100).toFixed(0);
-    if (parseInt(gain) > 0) {
-      metricEl.innerHTML = '<span class="glow-green">KNOWLEDGE COMPOUNDING: +' + gain + '%</span>';
+  // Knowledge compounding: average improvement cold->warm across all 3 agents
+  var gains = [];
+  var agentTypes = ['opus', 'sonnet', 'haiku'];
+  for (var ai = 0; ai < agentTypes.length; ai++) {
+    var coldD = byKey['cold:' + agentTypes[ai]];
+    var warmD = byKey['warm:' + agentTypes[ai]];
+    if (coldD && warmD && coldD.totalPoints > 0) {
+      gains.push((warmD.totalPoints - coldD.totalPoints) / coldD.totalPoints);
+    }
+  }
+  if (gains.length > 0) {
+    var avgGain = gains.reduce(function(s, g) { return s + g; }, 0) / gains.length;
+    var pctGain = (avgGain * 100).toFixed(0);
+    if (parseInt(pctGain) > 0) {
+      metricEl.innerHTML = '<span class="glow-green">KNOWLEDGE COMPOUNDING: +' + pctGain + '% avg across ' + gains.length + ' agents</span>';
     } else { metricEl.textContent = ''; }
   } else { metricEl.textContent = ''; }
 }
@@ -1312,6 +1397,8 @@ function renderTicker() {
   track.style.animation = 'tickerScroll ' + dur + 's linear infinite';
 }
 
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
 function buildTickerFromState(flags, tools) {
   tickerEvents = [];
   var fl = flags || [];
@@ -1319,7 +1406,7 @@ function buildTickerFromState(flags, tools) {
     var f = fl[i];
     tickerEvents.push({
       type: 'flag',
-      text: '<span class="tick-agent">[' + (f.agentId || '').slice(0,6) + ']</span> \\u{1F3F4} CAPTURED ' + (f.challenge || '???') + ' <span class="tick-pts">+' + f.points + 'pts</span>'
+      text: '<span class="tick-agent">[' + esc((f.agentId || '').slice(0,6)) + ']</span> \\u{1F3F4} CAPTURED ' + esc(f.challenge || '???') + ' <span class="tick-pts">+' + f.points + 'pts</span>'
     });
   }
   var gt = (tools || []).filter(function(t) { return ['burst','explore','trace','contribute','learn','report_finding'].indexOf(t.tool) >= 0; });
@@ -1328,7 +1415,7 @@ function buildTickerFromState(flags, tools) {
     var isCont = t.tool === 'contribute';
     tickerEvents.push({
       type: isCont ? 'contribute' : 'query',
-      text: '<span class="tick-agent">[' + (t.agentId || '').slice(0,6) + ']</span> ' + (isCont ? '\\u{2728}' : '\\u{1F4E1}') + ' ' + t.tool.toUpperCase()
+      text: '<span class="tick-agent">[' + esc((t.agentId || '').slice(0,6)) + ']</span> ' + (isCont ? '\\u{2728}' : '\\u{1F4E1}') + ' ' + esc(t.tool).toUpperCase()
     });
   }
   renderTicker();
@@ -1348,7 +1435,7 @@ function connectSSE() {
       try {
         const d = JSON.parse(e.data);
         screenShake();
-        addTickerEvent('flag', '<span class="tick-agent">[' + (d.agentId || '').slice(0,6) + ']</span> \\u{1F3F4} CAPTURED ' + (d.challenge || '???') + ' <span class="tick-pts">+' + (d.points || 0) + 'pts</span>');
+        addTickerEvent('flag', '<span class="tick-agent">[' + esc((d.agentId || '').slice(0,6)) + ']</span> \\u{1F3F4} CAPTURED ' + esc(d.challenge || '???') + ' <span class="tick-pts">+' + (d.points || 0) + 'pts</span>');
         if (d.agentId) { flashTimers[d.agentId] = true; setTimeout(function() { delete flashTimers[d.agentId]; }, 1500); }
         pollState();
       } catch(err) {}
@@ -1440,7 +1527,10 @@ async function pollGraph() {
     const graphRes = await fetch('/api/graph').then(function(r) { return r.json(); });
     const nodes = graphRes.nodes || [];
     const edges = graphRes.edges || [];
-    if (Math.abs(nodes.length - gNodes.length) > 2 || gNodes.length === 0) {
+    const currentIds = new Set(gNodes.map(n => n.id));
+    const newIds = new Set(nodes.map(n => n.id));
+    const idsChanged = nodes.some(n => !currentIds.has(n.id)) || gNodes.some(n => !newIds.has(n.id));
+    if (idsChanged || Math.abs(nodes.length - gNodes.length) > 2 || gNodes.length === 0) {
       initGraph(nodes, edges);
     }
   } catch (e) { console.error('Graph poll error:', e); }

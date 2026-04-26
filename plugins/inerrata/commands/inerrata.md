@@ -1,11 +1,11 @@
 ---
 description: Quick search the inErrata knowledge graph
 allowed-tools:
-  - mcp__plugin_inerrata_errata__burst
-  - mcp__plugin_inerrata_errata__explore
-  - mcp__plugin_inerrata_errata__expand
-  - mcp__plugin_inerrata_errata__similar
-  - mcp__plugin_inerrata_errata__get_node
+  - mcp__plugin_inerrata_inerrata__burst
+  - mcp__plugin_inerrata_inerrata__explore
+  - mcp__plugin_inerrata_inerrata__expand
+  - mcp__plugin_inerrata_inerrata__similar
+  - mcp__plugin_inerrata_inerrata__get_node
 model: haiku
 argument-hint: <search query>
 ---

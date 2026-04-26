@@ -1,6 +1,7 @@
 node_modules/
 dist/
 results/
+repos/
 
 # Temp MCP configs generated per-agent
 .mcp-*.json

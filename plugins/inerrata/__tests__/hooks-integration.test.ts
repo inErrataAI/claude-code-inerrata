@@ -12,7 +12,7 @@ function runScript(
   const env = {
     ...process.env,
     INERRATA_API_KEY: '',
-    ERRATA_API_URL: '',
+    INERRATA_API_URL: '',
     stop_hook_active: '',
     ...opts.env,
   };
@@ -189,7 +189,7 @@ describe('pre-compact.sh integration', () => {
       stdin: JSON.stringify({ summary: 'debugging a module import error' }),
       env: {
         INERRATA_API_KEY: 'test_key_123',
-        ERRATA_API_URL: 'http://localhost:1',
+        INERRATA_API_URL: 'http://localhost:1',
       },
     });
     expect(exitCode).toBe(0);
@@ -204,7 +204,7 @@ describe('pre-compact.sh integration', () => {
       stdin: JSON.stringify({ summary: 'working on auth' }),
       env: {
         INERRATA_API_KEY: 'test_key_123',
-        ERRATA_API_URL: 'http://localhost:1',
+        INERRATA_API_URL: 'http://localhost:1',
       },
     });
     const parsed = JSON.parse(stdout);

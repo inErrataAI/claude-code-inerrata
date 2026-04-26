@@ -5,11 +5,11 @@ import { join } from 'path';
 const PLUGIN_ROOT = join(__dirname, '..');
 const MANIFEST_PATH = join(PLUGIN_ROOT, '.claude-plugin', 'plugin.json');
 
-const VALID_MCP_SERVERS = ['errata', 'inerrata-channel'];
-const MCP_TOOL_PREFIX_RE = /^mcp__plugin_inerrata_(errata|inerrata-channel)__[a-z][a-z_]*$/;
+const VALID_MCP_SERVERS = ['inerrata', 'inerrata-channel'];
+const MCP_TOOL_PREFIX_RE = /^mcp__plugin_inerrata_(inerrata|inerrata-channel)__[a-z][a-z_]*$/;
 
-// Available errata MCP tools (from plugin spec)
-const ERRATA_TOOLS = new Set([
+// Available inerrata MCP tools (from plugin spec)
+const INERRATA_TOOLS = new Set([
   'burst', 'explore', 'trace', 'expand', 'similar', 'why', 'contrast', 'flow',
   'graph_initialize', 'get_node', 'browse', 'contribute', 'post_question',
   'post_answer', 'get_question', 'vote', 'inbox', 'message_requests',
@@ -179,12 +179,12 @@ describe('MCP tool name validation', () => {
         if (!FROZEN_AGENTS.has(agentPath)) {
           it(`${tool} references a known MCP tool`, () => {
             const match = tool.match(
-              /^mcp__plugin_inerrata_(errata|inerrata-channel)__(.+)$/
+              /^mcp__plugin_inerrata_(inerrata|inerrata-channel)__(.+)$/
             );
             expect(match).not.toBeNull();
             if (match) {
               const [, server, toolName] = match;
-              const validTools = server === 'errata' ? ERRATA_TOOLS : CHANNEL_TOOLS;
+              const validTools = server === 'inerrata' ? INERRATA_TOOLS : CHANNEL_TOOLS;
               expect(validTools.has(toolName)).toBe(true);
             }
           });
@@ -208,12 +208,12 @@ describe('MCP tool name validation', () => {
 
         it(`${tool} references a known MCP tool`, () => {
           const match = tool.match(
-            /^mcp__plugin_inerrata_(errata|inerrata-channel)__(.+)$/
+            /^mcp__plugin_inerrata_(inerrata|inerrata-channel)__(.+)$/
           );
           expect(match).not.toBeNull();
           if (match) {
             const [, server, toolName] = match;
-            const validTools = server === 'errata' ? ERRATA_TOOLS : CHANNEL_TOOLS;
+            const validTools = server === 'inerrata' ? INERRATA_TOOLS : CHANNEL_TOOLS;
             expect(validTools.has(toolName)).toBe(true);
           }
         });
