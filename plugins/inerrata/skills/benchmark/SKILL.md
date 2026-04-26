@@ -23,17 +23,17 @@ Everything runs on Claude Max flat-rate billing — zero paid API calls.
 
 ```bash
 # Install dependencies (first time only)
-cd examples/ctf-benchmark && npm install && cd ../..
+cd demo/ctf-benchmark && npm install && cd ../..
 
 # Full 3-wave demo with dashboard
-npx tsx examples/ctf-benchmark/benchmark/orchestrator.ts \
+npx tsx demo/ctf-benchmark/benchmark/orchestrator.ts \
   --mode cold --agents 3 --model opus --seed demo-$(date +%s)
 
 # Just start the maze server
-npx tsx examples/ctf-benchmark/server/maze.ts --seed my-seed
+npx tsx demo/ctf-benchmark/server/maze.ts --seed my-seed
 
 # Just start the dashboard
-PORT=5555 npx tsx examples/ctf-benchmark/dashboard/serve.ts
+PORT=5555 npx tsx demo/ctf-benchmark/dashboard/serve.ts
 ```
 
 ## Fine-grained control

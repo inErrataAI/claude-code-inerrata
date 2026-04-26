@@ -4,7 +4,7 @@ import { join } from 'path';
 
 const REPO_ROOT = join(__dirname, '..');
 const MARKETPLACE_JSON = join(REPO_ROOT, '.claude-plugin', 'marketplace.json');
-const CTF_PLUGIN_DIR = join(REPO_ROOT, 'examples', 'ctf-benchmark');
+const CTF_PLUGIN_DIR = join(REPO_ROOT, 'demo', 'ctf-benchmark');
 const INERRATA_PLUGIN_DIR = join(REPO_ROOT, 'plugins', 'inerrata');
 const CTF_MANIFEST_PATH = join(CTF_PLUGIN_DIR, '.claude-plugin', 'plugin.json');
 
@@ -40,11 +40,11 @@ describe('Marketplace Registration', () => {
     expect(entry).toBeDefined();
   });
 
-  it('ctf-benchmark entry has source pointing to "./examples/ctf-benchmark"', () => {
+  it('ctf-benchmark entry has source pointing to "./demo/ctf-benchmark"', () => {
     const entry = marketplace.plugins.find((p: any) => p.name === 'ctf-benchmark');
     expect(entry).toBeDefined();
     const source = typeof entry.source === 'string' ? entry.source : entry.source.path;
-    expect(source).toBe('./examples/ctf-benchmark');
+    expect(source).toBe('./demo/ctf-benchmark');
   });
 
   it('ctf-benchmark entry has category and tags', () => {
@@ -63,7 +63,7 @@ describe('Marketplace Registration', () => {
 // Group 2: Plugin Manifest
 // ---------------------------------------------------------------------------
 describe('Plugin Manifest', () => {
-  it('examples/ctf-benchmark/.claude-plugin/plugin.json exists', () => {
+  it('demo/ctf-benchmark/.claude-plugin/plugin.json exists', () => {
     expect(existsSync(CTF_MANIFEST_PATH)).toBe(true);
   });
 
@@ -248,7 +248,7 @@ describe('Bridge Skill', () => {
 // Group 5: Project Files
 // ---------------------------------------------------------------------------
 describe('Project Files', () => {
-  it('examples/ctf-benchmark/package.json exists and parses', () => {
+  it('demo/ctf-benchmark/package.json exists and parses', () => {
     const pkgPath = join(CTF_PLUGIN_DIR, 'package.json');
     expect(existsSync(pkgPath)).toBe(true);
     let pkg: any;
@@ -263,7 +263,7 @@ describe('Project Files', () => {
   it('package.json has scripts: maze, benchmark, dashboard', () => {
     const pkgPath = join(CTF_PLUGIN_DIR, 'package.json');
     if (!existsSync(pkgPath)) {
-      expect.fail('examples/ctf-benchmark/package.json does not exist');
+      expect.fail('demo/ctf-benchmark/package.json does not exist');
       return;
     }
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
@@ -273,12 +273,12 @@ describe('Project Files', () => {
     expect(pkg.scripts).toHaveProperty('dashboard');
   });
 
-  it('examples/ctf-benchmark/tsconfig.json exists', () => {
+  it('demo/ctf-benchmark/tsconfig.json exists', () => {
     const tsconfigPath = join(CTF_PLUGIN_DIR, 'tsconfig.json');
     expect(existsSync(tsconfigPath)).toBe(true);
   });
 
-  it('examples/ctf-benchmark/.mcp.json exists and references INERRATA_API_KEY', () => {
+  it('demo/ctf-benchmark/.mcp.json exists and references INERRATA_API_KEY', () => {
     const mcpPath = join(CTF_PLUGIN_DIR, '.mcp.json');
     expect(existsSync(mcpPath)).toBe(true);
     const raw = readFileSync(mcpPath, 'utf-8');
@@ -294,7 +294,7 @@ describe('Project Files', () => {
     expect(raw).not.toMatch(/(?<![IN])ERRATA_API_KEY/);
   });
 
-  it('examples/ctf-benchmark/.gitignore exists', () => {
+  it('demo/ctf-benchmark/.gitignore exists', () => {
     const giPath = join(CTF_PLUGIN_DIR, '.gitignore');
     expect(existsSync(giPath)).toBe(true);
   });

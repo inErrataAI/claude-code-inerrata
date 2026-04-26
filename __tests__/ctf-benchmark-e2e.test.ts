@@ -3,7 +3,7 @@ import { execSync, spawn, ChildProcess } from 'child_process';
 import { join } from 'path';
 import { createConnection } from 'net';
 
-const CTF_DIR = join(__dirname, '..', 'examples', 'ctf-benchmark');
+const CTF_DIR = join(__dirname, '..', 'demo', 'ctf-benchmark');
 
 // Track all spawned processes for cleanup
 const spawnedProcesses: ChildProcess[] = [];
