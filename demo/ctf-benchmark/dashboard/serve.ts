@@ -555,8 +555,109 @@ app.get('/api/state', (c) => {
   })
 })
 
-// Graph endpoint — queries inErrata API or returns empty for cold runs
+// Graph endpoint — queries inErrata API, or returns simulated graph in sim mode
+const simGraphNodes: Array<{ id: string; type: string; label: string }> = []
+const simGraphEdges: Array<{ source: string; target: string; type: string }> = []
+
+// Seed the simulated graph with domain concepts that grow over time
+const SIM_GRAPH_SEED = {
+  domains: [
+    { id: 'dom-injection', type: 'Domain', label: 'SQL Injection' },
+    { id: 'dom-auth', type: 'Domain', label: 'Auth Bypass' },
+    { id: 'dom-idor', type: 'Domain', label: 'IDOR' },
+    { id: 'dom-ssrf', type: 'Domain', label: 'SSRF' },
+    { id: 'dom-crypto', type: 'Domain', label: 'Crypto Weakness' },
+    { id: 'dom-jwt', type: 'Domain', label: 'JWT Forgery' },
+    { id: 'dom-traversal', type: 'Domain', label: 'Path Traversal' },
+    { id: 'dom-race', type: 'Domain', label: 'Race Condition' },
+  ],
+  vulns: [
+    { id: 'v-sqli-union', type: 'Vulnerability', label: 'UNION-based SQLi', parent: 'dom-injection' },
+    { id: 'v-sqli-blind', type: 'Vulnerability', label: 'Blind SQLi', parent: 'dom-injection' },
+    { id: 'v-jwt-none', type: 'Vulnerability', label: 'alg:none bypass', parent: 'dom-jwt' },
+    { id: 'v-jwt-weak', type: 'Vulnerability', label: 'Weak JWT secret', parent: 'dom-jwt' },
+    { id: 'v-idor-seq', type: 'Vulnerability', label: 'Sequential ID enum', parent: 'dom-idor' },
+    { id: 'v-ssrf-redir', type: 'Vulnerability', label: 'Redirect-based SSRF', parent: 'dom-ssrf' },
+    { id: 'v-path-dotdot', type: 'Vulnerability', label: '../ traversal', parent: 'dom-traversal' },
+    { id: 'v-race-toctou', type: 'Vulnerability', label: 'TOCTOU race', parent: 'dom-race' },
+    { id: 'v-crypto-ecb', type: 'Vulnerability', label: 'ECB mode leak', parent: 'dom-crypto' },
+    { id: 'v-auth-default', type: 'Vulnerability', label: 'Default credentials', parent: 'dom-auth' },
+  ],
+  solutions: [
+    { id: 's-union-extract', type: 'Solution', label: 'UNION SELECT extraction', parent: 'v-sqli-union' },
+    { id: 's-jwt-forge', type: 'Solution', label: 'Forge admin token', parent: 'v-jwt-none' },
+    { id: 's-idor-brute', type: 'Solution', label: 'Brute-force ID space', parent: 'v-idor-seq' },
+    { id: 's-ssrf-bypass', type: 'Solution', label: 'DNS rebind bypass', parent: 'v-ssrf-redir' },
+    { id: 's-traversal-encode', type: 'Solution', label: 'Double-encode dots', parent: 'v-path-dotdot' },
+    { id: 's-race-parallel', type: 'Solution', label: 'Parallel request race', parent: 'v-race-toctou' },
+    { id: 's-ecb-swap', type: 'Solution', label: 'Block swap attack', parent: 'v-crypto-ecb' },
+    { id: 's-default-admin', type: 'Solution', label: 'admin:admin login', parent: 'v-auth-default' },
+  ],
+  patterns: [
+    { id: 'p-chained', type: 'Pattern', label: 'Chained exploit', parents: ['v-jwt-none', 'v-idor-seq'] },
+    { id: 'p-recon-first', type: 'Pattern', label: 'Recon → Exploit', parents: ['dom-injection', 'dom-auth'] },
+    { id: 'p-error-based', type: 'Pattern', label: 'Error-based leak', parents: ['v-sqli-blind', 'v-crypto-ecb'] },
+  ],
+}
+
+// Build sim graph progressively based on current wave state
+function buildSimGraph() {
+  const flags = state.flagTimeline.length
+  const mode = state.mode
+  const nodes: typeof simGraphNodes = []
+  const edges: typeof simGraphEdges = []
+
+  // Always show domains (discovered as base map)
+  const domainCount = Math.min(SIM_GRAPH_SEED.domains.length, 3 + Math.floor(flags / 2))
+  for (let i = 0; i < domainCount; i++) {
+    nodes.push(SIM_GRAPH_SEED.domains[i])
+  }
+
+  // Vulns appear as agents make progress
+  const vulnCount = Math.min(SIM_GRAPH_SEED.vulns.length, Math.floor(flags * 1.2))
+  for (let i = 0; i < vulnCount; i++) {
+    const v = SIM_GRAPH_SEED.vulns[i]
+    nodes.push(v)
+    if (nodes.find(n => n.id === v.parent)) {
+      edges.push({ source: v.parent, target: v.id, type: 'contains' })
+    }
+  }
+
+  // Solutions appear in warm mode or after many flags
+  if (mode === 'warm' || flags > 8) {
+    const solCount = Math.min(SIM_GRAPH_SEED.solutions.length, mode === 'warm' ? Math.floor(flags * 0.8) : Math.floor(flags * 0.3))
+    for (let i = 0; i < solCount; i++) {
+      const s = SIM_GRAPH_SEED.solutions[i]
+      nodes.push(s)
+      if (nodes.find(n => n.id === s.parent)) {
+        edges.push({ source: s.parent, target: s.id, type: 'solved_by' })
+      }
+    }
+  }
+
+  // Patterns emerge in warm mode
+  if (mode === 'warm' && flags > 3) {
+    const patCount = Math.min(SIM_GRAPH_SEED.patterns.length, Math.floor(flags / 4))
+    for (let i = 0; i < patCount; i++) {
+      const p = SIM_GRAPH_SEED.patterns[i]
+      nodes.push(p)
+      for (const pid of p.parents) {
+        if (nodes.find(n => n.id === pid)) {
+          edges.push({ source: pid, target: p.id, type: 'exemplifies' })
+        }
+      }
+    }
+  }
+
+  return { nodes, edges }
+}
+
 app.get('/api/graph', async (c) => {
+  // In simulation mode, return procedurally growing graph
+  if (simulate) {
+    return c.json(buildSimGraph())
+  }
+
   const apiUrl = process.env.CTF_API_URL ?? 'http://localhost:3100'
   const apiKey = process.env.INERRATA_API_KEY ?? ''
 
