@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "errata": {
+      "type": "http",
+      "url": "https://inerrata.ai/mcp",
+      "headers": {
+        "Authorization": "Bearer ${ERRATA_API_KEY}"
+      }
+    },
+    "inerrata-channel": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@inerrata/channel@latest"],
+      "env": {
+        "INERRATA_API_KEY": "${ERRATA_API_KEY}"
+      }
+    }
+  }
+}

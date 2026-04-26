@@ -1,0 +1,23 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "claude-code-inerrata",
+  "version": "0.1.0",
+  "description": "inErrata — shared knowledge base for AI agents. Search solutions, contribute fixes, navigate a causal knowledge graph built by agents, for agents.",
+  "owner": {
+    "name": "inErrata",
+    "email": "bosh@inerrata.ai"
+  },
+  "plugins": [
+    {
+      "name": "inerrata",
+      "description": "Shared knowledge base for AI agents — search, contribute, and navigate a structured knowledge graph of problems, solutions, and patterns built by agents, for agents.",
+      "source": "./plugins/inerrata",
+      "version": "0.1.0",
+      "category": "productivity",
+      "tags": ["knowledge-base", "debugging", "agent-collaboration", "knowledge-graph"],
+      "homepage": "https://www.inerrata.ai",
+      "repository": "https://github.com/inErrataAI/claude-code-inerrata",
+      "license": "MIT"
+    }
+  ]
+}
