@@ -551,6 +551,7 @@ app.get('/api/state', (c) => {
     totalFlags: state.flagTimeline.length,
     uniqueChallenges: [...new Set(state.flagTimeline.map(f => f.challenge))],
     priorResults,
+    simulate,
   })
 })
 
@@ -785,6 +786,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 </style>
 </head>
 <body>
+<script src="/sprites.js"></script>
 
 <!-- CRT overlays -->
 <div id="crt-overlay"></div>
@@ -1051,13 +1053,51 @@ let prevFlagCount = 0;
 const flashTimers = {};
 let currentModel = '';
 
+// Sprite rendering cache — pre-render to data URLs
+const _spriteDataURLCache = {};
+let _spriteRenderer = null;
+const _spriteCanvas = document.createElement('canvas');
+_spriteCanvas.width = 128; _spriteCanvas.height = 128;
+const _spriteCtx = _spriteCanvas.getContext('2d');
+if (window.SpritesEngine) {
+  _spriteRenderer = window.SpritesEngine.createSpriteRenderer(_spriteCtx);
+}
+
+function getSpriteDataURL(charType, animState, frame) {
+  const key = charType + ':' + animState + ':' + frame;
+  if (_spriteDataURLCache[key]) return _spriteDataURLCache[key];
+  if (!_spriteRenderer) return null;
+  const size = charType === 'opus' ? 32 : 24;
+  const scale = charType === 'opus' ? 3 : 4;
+  const dim = size * scale;
+  _spriteCanvas.width = dim; _spriteCanvas.height = dim;
+  _spriteCtx.clearRect(0, 0, dim, dim);
+  _spriteRenderer.draw(charType, animState, frame, 0, 0, scale);
+  _spriteDataURLCache[key] = _spriteCanvas.toDataURL();
+  return _spriteDataURLCache[key];
+}
+
+// Determine sprite state from agent status
+function agentSpriteState(a) {
+  if (a.status === 'finished') return a.flags && a.flags.length > 0 ? 'victory' : 'defeated';
+  if (a.status === 'throttled') return 'defeated';
+  if (a.status === 'failed') return 'defeated';
+  if (a.currentTool && a.currentTool !== 'starting' && a.currentTool !== '...') return 'attack';
+  return 'idle';
+}
+
+let _spriteAnimFrame = 0;
+setInterval(function() { _spriteAnimFrame = (_spriteAnimFrame + 1) % 2; }, 400);
+
 function renderAgents(agents, totalChallenges) {
   const list = document.getElementById('agents-list');
   list.innerHTML = agents.map((a, i) => {
     const callPct = Math.min(100, Math.round((a.toolCalls / (a.maxCalls || 100)) * 100));
     const isFlash = flashTimers[a.id];
-    const isOpus = currentModel.toLowerCase().includes('opus');
-    const spriteClass = isOpus ? 'sprite-opus' : 'sprite-haiku';
+    const isOpus = (a.handle || a.id || '').toLowerCase().includes('opus') || currentModel.toLowerCase().includes('opus');
+    const charType = isOpus ? 'opus' : 'haiku';
+    const animState = agentSpriteState(a);
+    const spriteURL = getSpriteDataURL(charType, animState, _spriteAnimFrame);
     const dotClass = 'dot-' + a.status;
     const actionClass = a.status === 'throttled' ? 'agent-action throttled-text' : 'agent-action';
     const actionText = a.status === 'throttled' ? '429 RATE LIMITED' : (a.currentTool || '...');
@@ -1076,8 +1116,12 @@ function renderAgents(agents, totalChallenges) {
       ap.y += (targetNode.y - ap.y) * 0.05;
     }
 
+    const spriteHTML = spriteURL
+      ? '<img class="agent-sprite" src="' + spriteURL + '" style="width:' + (isOpus ? '48' : '40') + 'px;height:' + (isOpus ? '48' : '40') + 'px;image-rendering:pixelated;" title="' + (isOpus ? 'Wizard (Opus)' : 'Rogue (Haiku)') + '">'
+      : '<div class="agent-sprite ' + (isOpus ? 'sprite-opus' : 'sprite-haiku') + '" title="' + (isOpus ? 'Wizard (Opus)' : 'Rogue (Haiku)') + '"></div>';
+
     return '<div class="agent-card ' + a.status + (isFlash ? ' flash' : '') + '">'
-      + '<div class="agent-sprite ' + spriteClass + '" title="' + (isOpus ? 'Wizard (Opus)' : 'Rogue (Haiku)') + '"></div>'
+      + spriteHTML
       + '<div class="agent-info">'
       + '<div class="agent-handle">Agent ' + (i+1) + ' <span style="color:var(--muted)">(' + (a.handle || a.shortId || a.id).slice(0,10) + ')</span></div>'
       + '<div class="' + actionClass + '">' + actionText + '</div>'
@@ -1193,8 +1237,9 @@ function buildTickerFromState(flags, tools) {
 // SSE connection to maze server
 // =========================================================================
 let sseConnected = false;
+let isSimulationMode = false; // set from first pollState response
 function connectSSE() {
-  if (!MAZE_URL) return;
+  if (!MAZE_URL || isSimulationMode) return;
   try {
     const es = new EventSource(MAZE_URL + '/maze/events');
     es.onopen = function() { sseConnected = true; };
@@ -1244,7 +1289,8 @@ function connectSSE() {
     es.onerror = function() { sseConnected = false; es.close(); setTimeout(connectSSE, 5000); };
   } catch(err) { sseConnected = false; }
 }
-connectSSE();
+// Defer SSE connection until we know if we're in simulation mode
+setTimeout(function() { if (!isSimulationMode) connectSSE(); }, 3000);
 
 // =========================================================================
 // Polling
@@ -1254,6 +1300,7 @@ let ctfStartTime = null;
 async function pollState() {
   try {
     const stateRes = await fetch('/api/state').then(function(r) { return r.json(); });
+    if (stateRes.simulate) isSimulationMode = true;
     currentModel = stateRes.model || '';
 
     document.getElementById('run-meta').textContent =
