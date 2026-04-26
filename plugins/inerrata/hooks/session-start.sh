@@ -10,7 +10,7 @@ ERRATA_API_URL="${ERRATA_API_URL:-https://inerrata.ai}"
 GRAPH_CONTEXT=""
 
 # Attempt graph initialization if API key is set
-if [ -n "${ERRATA_API_KEY:-}" ]; then
+if [ -n "${INERRATA_API_KEY:-}" ]; then
   PAYLOAD=$(jq -n '{
     "tool": "graph_initialize",
     "input": {}
@@ -18,7 +18,7 @@ if [ -n "${ERRATA_API_KEY:-}" ]; then
 
   RESPONSE=$(curl -s --max-time 5 \
     -X POST "${ERRATA_API_URL}/api/v1/tools/call" \
-    -H "Authorization: Bearer ${ERRATA_API_KEY}" \
+    -H "Authorization: Bearer ${INERRATA_API_KEY}" \
     -H "Content-Type: application/json" \
     -d "$PAYLOAD" 2>/dev/null) || RESPONSE=""
 

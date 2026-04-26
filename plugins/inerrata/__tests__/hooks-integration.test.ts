@@ -11,7 +11,7 @@ function runScript(
   const scriptPath = join(HOOKS_DIR, scriptName);
   const env = {
     ...process.env,
-    ERRATA_API_KEY: '',
+    INERRATA_API_KEY: '',
     ERRATA_API_URL: '',
     stop_hook_active: '',
     ...opts.env,
@@ -36,10 +36,10 @@ function runScript(
 describe('post-tool-failure.sh integration', () => {
   const SCRIPT = 'post-tool-failure.sh';
 
-  it('exits 0 silently when ERRATA_API_KEY is not set', () => {
+  it('exits 0 silently when INERRATA_API_KEY is not set', () => {
     const { stdout, exitCode } = runScript(SCRIPT, {
       stdin: JSON.stringify({ tool_name: 'Bash', error: 'ModuleNotFoundError' }),
-      env: { ERRATA_API_KEY: '' },
+      env: { INERRATA_API_KEY: '' },
     });
     expect(exitCode).toBe(0);
     expect(stdout.trim()).toBe('');
@@ -48,7 +48,7 @@ describe('post-tool-failure.sh integration', () => {
   it('exits 0 when error field is empty', () => {
     const { stdout, exitCode } = runScript(SCRIPT, {
       stdin: JSON.stringify({ tool_name: 'Bash', error: '' }),
-      env: { ERRATA_API_KEY: 'test_key_123' },
+      env: { INERRATA_API_KEY: 'test_key_123' },
     });
     expect(exitCode).toBe(0);
     expect(stdout.trim()).toBe('');
@@ -57,7 +57,7 @@ describe('post-tool-failure.sh integration', () => {
   it('exits 0 when stdin is empty JSON object', () => {
     const { stdout, exitCode } = runScript(SCRIPT, {
       stdin: '{}',
-      env: { ERRATA_API_KEY: 'test_key_123' },
+      env: { INERRATA_API_KEY: 'test_key_123' },
     });
     expect(exitCode).toBe(0);
     expect(stdout.trim()).toBe('');
@@ -66,7 +66,7 @@ describe('post-tool-failure.sh integration', () => {
   it('exits 0 when stdin is not valid JSON (no API key)', () => {
     const { stdout, exitCode } = runScript(SCRIPT, {
       stdin: 'not json at all',
-      env: { ERRATA_API_KEY: '' },
+      env: { INERRATA_API_KEY: '' },
     });
     expect(exitCode).toBe(0);
     expect(stdout.trim()).toBe('');
@@ -125,9 +125,9 @@ describe('post-tool-failure.sh integration', () => {
 describe('session-start.sh integration', () => {
   const SCRIPT = 'session-start.sh';
 
-  it('outputs valid JSON without ERRATA_API_KEY', () => {
+  it('outputs valid JSON without INERRATA_API_KEY', () => {
     const { stdout, exitCode } = runScript(SCRIPT, {
-      env: { ERRATA_API_KEY: '' },
+      env: { INERRATA_API_KEY: '' },
     });
     expect(exitCode).toBe(0);
     expect(stdout.trim()).not.toBe('');
@@ -137,7 +137,7 @@ describe('session-start.sh integration', () => {
 
   it('includes skills in additionalContext', () => {
     const { stdout } = runScript(SCRIPT, {
-      env: { ERRATA_API_KEY: '' },
+      env: { INERRATA_API_KEY: '' },
     });
     const parsed = JSON.parse(stdout);
     expect(parsed.additionalContext).toContain('inErrata skills');
@@ -147,7 +147,7 @@ describe('session-start.sh integration', () => {
 
   it('includes behavioral contract text', () => {
     const { stdout } = runScript(SCRIPT, {
-      env: { ERRATA_API_KEY: '' },
+      env: { INERRATA_API_KEY: '' },
     });
     const parsed = JSON.parse(stdout);
     expect(parsed.additionalContext).toContain('Behavioral contract');
@@ -157,7 +157,7 @@ describe('session-start.sh integration', () => {
 
   it('includes cost framing (~400 tokens)', () => {
     const { stdout } = runScript(SCRIPT, {
-      env: { ERRATA_API_KEY: '' },
+      env: { INERRATA_API_KEY: '' },
     });
     const parsed = JSON.parse(stdout);
     expect(parsed.additionalContext).toContain('~400 tokens');
@@ -165,7 +165,7 @@ describe('session-start.sh integration', () => {
 
   it('does not reference burst() in the contract', () => {
     const { stdout } = runScript(SCRIPT, {
-      env: { ERRATA_API_KEY: '' },
+      env: { INERRATA_API_KEY: '' },
     });
     const parsed = JSON.parse(stdout);
     expect(parsed.additionalContext).not.toContain('call burst()');
@@ -175,10 +175,10 @@ describe('session-start.sh integration', () => {
 describe('pre-compact.sh integration', () => {
   const SCRIPT = 'pre-compact.sh';
 
-  it('exits 0 silently when ERRATA_API_KEY is not set', () => {
+  it('exits 0 silently when INERRATA_API_KEY is not set', () => {
     const { stdout, exitCode } = runScript(SCRIPT, {
       stdin: JSON.stringify({ summary: 'some context' }),
-      env: { ERRATA_API_KEY: '' },
+      env: { INERRATA_API_KEY: '' },
     });
     expect(exitCode).toBe(0);
     expect(stdout.trim()).toBe('');
@@ -188,7 +188,7 @@ describe('pre-compact.sh integration', () => {
     const { stdout, exitCode } = runScript(SCRIPT, {
       stdin: JSON.stringify({ summary: 'debugging a module import error' }),
       env: {
-        ERRATA_API_KEY: 'test_key_123',
+        INERRATA_API_KEY: 'test_key_123',
         ERRATA_API_URL: 'http://localhost:1',
       },
     });
@@ -203,7 +203,7 @@ describe('pre-compact.sh integration', () => {
     const { stdout } = runScript(SCRIPT, {
       stdin: JSON.stringify({ summary: 'working on auth' }),
       env: {
-        ERRATA_API_KEY: 'test_key_123',
+        INERRATA_API_KEY: 'test_key_123',
         ERRATA_API_URL: 'http://localhost:1',
       },
     });
@@ -413,7 +413,7 @@ describe('Realistic MCP search response payload handling', () => {
     };
     const { exitCode } = runScript('post-tool-failure.sh', {
       stdin: JSON.stringify(failureInput),
-      env: { ERRATA_API_KEY: '' },
+      env: { INERRATA_API_KEY: '' },
     });
     expect(exitCode).toBe(0);
   });

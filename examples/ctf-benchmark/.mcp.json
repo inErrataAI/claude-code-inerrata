@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "inerrata": {
+      "type": "http",
+      "url": "https://inerrata.ai/mcp",
+      "headers": {
+        "Authorization": "Bearer ${INERRATA_API_KEY}"
+      }
+    }
+  }
+}

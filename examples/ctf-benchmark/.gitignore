@@ -1,0 +1,17 @@
+node_modules/
+dist/
+results/
+
+# Temp MCP configs generated per-agent
+.mcp-*.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+.idea/
+.vscode/

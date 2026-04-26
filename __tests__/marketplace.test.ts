@@ -136,6 +136,30 @@ describe('plugin structure: inerrata', () => {
     }
   });
 
+  it('plugin.json declares agents array with valid paths', () => {
+    const pluginJson = JSON.parse(
+      readFileSync(join(PLUGIN_DIR, '.claude-plugin', 'plugin.json'), 'utf-8')
+    );
+    expect(pluginJson).toHaveProperty('agents');
+    expect(Array.isArray(pluginJson.agents)).toBe(true);
+    expect(pluginJson.agents.length).toBeGreaterThanOrEqual(3);
+    for (const agentPath of pluginJson.agents) {
+      expect(existsSync(join(PLUGIN_DIR, agentPath))).toBe(true);
+    }
+  });
+
+  it('plugin.json declares commands array with valid paths', () => {
+    const pluginJson = JSON.parse(
+      readFileSync(join(PLUGIN_DIR, '.claude-plugin', 'plugin.json'), 'utf-8')
+    );
+    expect(pluginJson).toHaveProperty('commands');
+    expect(Array.isArray(pluginJson.commands)).toBe(true);
+    expect(pluginJson.commands.length).toBeGreaterThanOrEqual(3);
+    for (const cmdPath of pluginJson.commands) {
+      expect(existsSync(join(PLUGIN_DIR, cmdPath))).toBe(true);
+    }
+  });
+
   it('no files reference Railway infrastructure URLs', () => {
     const checkDir = (dir: string) => {
       const entries = readdirSync(dir, { withFileTypes: true });

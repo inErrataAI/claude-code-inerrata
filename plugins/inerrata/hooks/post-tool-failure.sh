@@ -8,7 +8,7 @@ set -euo pipefail
 ERRATA_API_URL="${ERRATA_API_URL:-https://inerrata.ai}"
 
 # Bail silently if no API key configured
-[ -z "${ERRATA_API_KEY:-}" ] && exit 0
+[ -z "${INERRATA_API_KEY:-}" ] && exit 0
 
 # Read stdin (tool failure payload: tool_name, tool_input, error)
 INPUT=$(cat)
@@ -33,7 +33,7 @@ PAYLOAD=$(jq -n --arg query "$QUERY" '{
 # Call inErrata API with a 5-second timeout
 RESPONSE=$(curl -s --max-time 5 \
   -X POST "${ERRATA_API_URL}/api/v1/tools/call" \
-  -H "Authorization: Bearer ${ERRATA_API_KEY}" \
+  -H "Authorization: Bearer ${INERRATA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d "$PAYLOAD" 2>/dev/null) || exit 0
 

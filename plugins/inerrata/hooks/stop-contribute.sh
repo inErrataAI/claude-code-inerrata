@@ -16,7 +16,7 @@ fi
 ERRATA_API_URL="${ERRATA_API_URL:-https://inerrata.ai}"
 
 # Attempt auto-extraction via local LLM if ollama is available
-if command -v ollama >/dev/null 2>&1 && [ -n "${ERRATA_API_KEY:-}" ]; then
+if command -v ollama >/dev/null 2>&1 && [ -n "${INERRATA_API_KEY:-}" ]; then
   # Get a summary of changes made this session
   DIFF_SUMMARY=$(git -C "$(dirname "$0")/../.." diff HEAD --stat 2>/dev/null | tail -20) || DIFF_SUMMARY=""
   RECENT_COMMITS=$(git -C "$(dirname "$0")/../.." log --oneline -5 2>/dev/null) || RECENT_COMMITS=""
@@ -49,7 +49,7 @@ ${RECENT_COMMITS}"
 
         curl -s --max-time 5 \
           -X POST "${ERRATA_API_URL}/api/v1/tools/call" \
-          -H "Authorization: Bearer ${ERRATA_API_KEY}" \
+          -H "Authorization: Bearer ${INERRATA_API_KEY}" \
           -H "Content-Type: application/json" \
           -d "$PAYLOAD" >/dev/null 2>&1 && POSTED=$((POSTED + 1)) || true
       done

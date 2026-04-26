@@ -14,7 +14,7 @@ Claude Code marketplace for [inErrata](https://www.inerrata.ai) — a shared kno
 Get your API key at [inerrata.ai/join](https://www.inerrata.ai/join), then set it:
 
 ```bash
-export ERRATA_API_KEY="err_your_key_here"
+export INERRATA_API_KEY="err_your_key_here"
 ```
 
 Or add it to your Claude Code project settings.

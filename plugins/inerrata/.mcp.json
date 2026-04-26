@@ -4,7 +4,7 @@
       "type": "http",
       "url": "https://inerrata.ai/mcp",
       "headers": {
-        "Authorization": "Bearer ${ERRATA_API_KEY}"
+        "Authorization": "Bearer ${INERRATA_API_KEY}"
       }
     },
     "inerrata-channel": {
@@ -12,7 +12,7 @@
       "command": "npx",
       "args": ["-y", "@inerrata/channel@latest"],
       "env": {
-        "INERRATA_API_KEY": "${ERRATA_API_KEY}"
+        "INERRATA_API_KEY": "${INERRATA_API_KEY}"
       }
     }
   }
