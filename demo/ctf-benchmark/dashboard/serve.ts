@@ -31,6 +31,10 @@ const outputIdx = args.indexOf('--output')
 const portIdx = args.indexOf('--port')
 const outputFile = outputIdx >= 0 ? args[outputIdx + 1] : null
 const port = portIdx >= 0 ? parseInt(args[portIdx + 1], 10) : 5555
+const simulateFlag = args.includes('--simulate')
+// Auto-simulate when no output file and no piped stdin
+const isTTY = process.stdin.isTTY !== false
+const simulate = simulateFlag || (!outputFile && isTTY)
 
 const app = new Hono()
 
@@ -222,6 +226,309 @@ if (outputFile) {
   parseOutputFile(absPath)
   watchFile(absPath, { interval: 1000 }, () => parseOutputFile(absPath))
   console.log(`Watching: ${absPath}`)
+}
+
+// ---------------------------------------------------------------------------
+// Simulation engine (--simulate mode)
+// ---------------------------------------------------------------------------
+
+interface SimChallenge {
+  id: string
+  name: string
+  difficulty: string
+  points: number
+  category: string
+}
+
+interface SimAgent {
+  id: string
+  handle: string
+  model: 'opus' | 'haiku'
+  solveRate: number
+  warmSolveRate: number
+  speed: number // ms between tool calls (base)
+  startDelay: number // ms delay before starting
+}
+
+const SIM_TOOLS = [
+  'http_request', 'curl', 'read_file', 'analyze_response', 'jq_extract',
+  'sql_inject', 'jwt_forge', 'path_traverse', 'decode_base64', 'http_request',
+  'curl', 'read_file', 'http_request', 'analyze_response', 'curl',
+]
+
+const GRAPH_TOOLS = ['burst', 'explore', 'trace', 'contribute', 'learn', 'report_finding']
+
+// Difficulty -> approximate tool calls needed to solve (tuned for ~90s demo)
+const DIFFICULTY_TOOL_COSTS: Record<string, [number, number]> = {
+  trivial: [2, 4],
+  easy: [4, 8],
+  medium: [6, 12],
+  hard: [10, 18],
+  expert: [15, 25],
+}
+
+async function runSimulation() {
+  // Import procedural engine for real challenge generation
+  const { generateMaze, createRng } = await import('../server/procedural.js')
+
+  const seed = 'demo-sim'
+  const rng = createRng(seed + '-sim-engine')
+  const maze = generateMaze(seed)
+
+  // Extract challenge metadata (we don't need the route handlers)
+  const challenges: SimChallenge[] = maze.challenges.map(c => ({
+    id: c.id,
+    name: c.name,
+    difficulty: c.difficulty,
+    points: c.points,
+    category: c.category,
+  }))
+
+  const AGENTS: SimAgent[] = [
+    { id: 'opus-prime',  handle: 'opus-prime',  model: 'opus',  solveRate: 0.72, warmSolveRate: 0.72, speed: 300,  startDelay: 0 },
+    { id: 'haiku-swift', handle: 'haiku-swift', model: 'haiku', solveRate: 0.42, warmSolveRate: 0.67, speed: 220,  startDelay: 400 },
+    { id: 'haiku-echo',  handle: 'haiku-echo',  model: 'haiku', solveRate: 0.40, warmSolveRate: 0.65, speed: 260,  startDelay: 800 },
+    { id: 'haiku-nova',  handle: 'haiku-nova',  model: 'haiku', solveRate: 0.38, warmSolveRate: 0.64, speed: 240,  startDelay: 1200 },
+    { id: 'haiku-zen',   handle: 'haiku-zen',   model: 'haiku', solveRate: 0.43, warmSolveRate: 0.68, speed: 280,  startDelay: 1600 },
+  ]
+
+  const WAVE_CONFIG = [
+    { label: 'OPUS COLD',  mode: 'cold', model: 'opus',  agents: ['opus-prime'], durationSec: 25 },
+    { label: 'HAIKU COLD', mode: 'cold', model: 'haiku', agents: ['haiku-swift', 'haiku-echo', 'haiku-nova', 'haiku-zen'], durationSec: 25 },
+    { label: 'HAIKU WARM', mode: 'warm', model: 'haiku', agents: ['haiku-swift', 'haiku-echo', 'haiku-nova', 'haiku-zen'], durationSec: 30 },
+  ]
+
+  // Simulation loop (restarts after completing all waves)
+  async function simulationLoop() {
+    while (true) {
+      // Reset prior results for scoreboard
+      priorResults = []
+
+      for (let waveIdx = 0; waveIdx < WAVE_CONFIG.length; waveIdx++) {
+        const wave = WAVE_CONFIG[waveIdx]
+        const waveAgents = AGENTS.filter(a => wave.agents.includes(a.id))
+        const isWarm = wave.mode === 'warm'
+        const waveNum = waveIdx + 1
+
+        // Reset state for this wave
+        state = {
+          agents: new Map(),
+          flagTimeline: [],
+          toolCallLog: [],
+          startTime: Date.now(),
+          runId: rng.hex(8),
+          target: `localhost:4444`,
+          mode: wave.mode,
+          model: wave.model === 'opus' ? 'claude-opus-4' : 'claude-haiku-3',
+          totalChallenges: challenges.length,
+          seed,
+        }
+
+        console.log(`[SIM] Wave ${waveNum}: ${wave.label} (${waveAgents.length} agents, ${wave.durationSec}s)`)
+
+        // Initialize agent states with staggered starts
+        for (const agent of waveAgents) {
+          state.agents.set(agent.id, {
+            id: agent.id,
+            shortId: agent.id.slice(0, 8),
+            handle: agent.handle,
+            toolCalls: 0,
+            maxCalls: 100,
+            flags: [],
+            currentTool: 'starting',
+            status: 'running',
+            errors: 0,
+            graphHits: 0,
+            lastActivity: Date.now(),
+            points: 0,
+          })
+        }
+
+        // Determine which challenges each agent will solve
+        const diffOrder: Record<string, number> = { trivial: 0, easy: 1, medium: 2, hard: 3, expert: 4 }
+        const agentTargets = new Map<string, { challenge: SimChallenge; toolCost: number; solved: boolean }[]>()
+        for (const agent of waveAgents) {
+          const agentRng = createRng(seed + `-${agent.id}-wave${waveNum}`)
+          const solveRate = isWarm ? agent.warmSolveRate : agent.solveRate
+          const targets = challenges.map(ch => {
+            const [minCost, maxCost] = DIFFICULTY_TOOL_COSTS[ch.difficulty] || [6, 12]
+            const toolCost = agentRng.int(minCost, maxCost)
+            const willSolve = agentRng.float() < solveRate
+            return { challenge: ch, toolCost, solved: willSolve }
+          })
+          // Sort roughly by difficulty (easier first) with some jitter for variety
+          const jitterMap = new Map(targets.map(t => [t, agentRng.float() * 1.5]))
+          targets.sort((a, b) => {
+            const da = (diffOrder[a.challenge.difficulty] ?? 2) + (jitterMap.get(a) ?? 0)
+            const db = (diffOrder[b.challenge.difficulty] ?? 2) + (jitterMap.get(b) ?? 0)
+            return da - db
+          })
+          agentTargets.set(agent.id, targets)
+        }
+
+        // Run the wave as a timed event loop
+        const waveStart = Date.now()
+        const waveDurationMs = wave.durationSec * 1000
+
+        await new Promise<void>((resolveWave) => {
+          // Per-agent simulation tickers
+          const agentTimers: ReturnType<typeof setTimeout>[] = []
+
+          for (const agent of waveAgents) {
+            const targets = agentTargets.get(agent.id)!
+            let targetIdx = 0
+            let toolCallsIntoChallenge = 0
+            let totalToolCalls = 0
+            let throttled = false
+
+            function scheduleNext() {
+              const elapsed = Date.now() - waveStart
+              if (elapsed >= waveDurationMs || targetIdx >= targets.length) {
+                // Agent finished
+                const agentState = state.agents.get(agent.id)
+                if (agentState) {
+                  agentState.status = 'finished'
+                  agentState.currentTool = 'done'
+                }
+                return
+              }
+
+              // Randomize timing: base speed +/- 40%
+              const jitter = agent.speed * (0.6 + Math.random() * 0.8)
+              const delay = throttled ? jitter + 2000 : jitter
+
+              const timer = setTimeout(() => {
+                const agentState = state.agents.get(agent.id)
+                if (!agentState) return
+
+                const target = targets[targetIdx]
+                totalToolCalls++
+                toolCallsIntoChallenge++
+                agentState.toolCalls = totalToolCalls
+                agentState.lastActivity = Date.now()
+
+                // Occasional throttle (2% chance per tick)
+                if (!throttled && Math.random() < 0.02) {
+                  throttled = true
+                  agentState.status = 'throttled'
+                  agentState.currentTool = '429 RATE LIMITED'
+                  // Recover after 1-3 seconds
+                  setTimeout(() => {
+                    throttled = false
+                    if (agentState.status === 'throttled') agentState.status = 'running'
+                  }, 1000 + Math.random() * 2000)
+                  scheduleNext()
+                  return
+                }
+
+                if (throttled) {
+                  // Still throttled, skip
+                  scheduleNext()
+                  return
+                }
+
+                agentState.status = 'running'
+
+                // Pick a realistic tool name
+                const isGraphTool = isWarm && Math.random() < 0.15
+                const toolName = isGraphTool
+                  ? GRAPH_TOOLS[Math.floor(Math.random() * GRAPH_TOOLS.length)]
+                  : SIM_TOOLS[Math.floor(Math.random() * SIM_TOOLS.length)]
+                agentState.currentTool = toolName
+
+                // Record tool call
+                state.toolCallLog.push({
+                  time: Date.now(),
+                  agentId: agent.id,
+                  tool: toolName,
+                })
+                // Keep log bounded
+                if (state.toolCallLog.length > 500) {
+                  state.toolCallLog = state.toolCallLog.slice(-250)
+                }
+
+                // Graph hits in warm mode
+                if (isWarm && isGraphTool && Math.random() < 0.4) {
+                  agentState.graphHits++
+                }
+
+                // Check if agent "solves" this challenge
+                if (toolCallsIntoChallenge >= target.toolCost) {
+                  if (target.solved) {
+                    // Flag captured!
+                    agentState.flags.push(target.challenge.id)
+                    agentState.points += target.challenge.points
+                    state.flagTimeline.push({
+                      time: Date.now(),
+                      agentId: agent.id,
+                      challenge: target.challenge.id,
+                      points: target.challenge.points,
+                    })
+                  }
+                  // Move to next challenge
+                  targetIdx++
+                  toolCallsIntoChallenge = 0
+                }
+
+                // Occasional error (1% chance)
+                if (Math.random() < 0.01) {
+                  agentState.errors++
+                }
+
+                scheduleNext()
+              }, targetIdx === 0 && totalToolCalls === 0 ? agent.startDelay + delay : delay)
+
+              agentTimers.push(timer)
+            }
+
+            scheduleNext()
+          }
+
+          // End the wave after duration
+          setTimeout(() => {
+            for (const t of agentTimers) clearTimeout(t)
+            // Mark all agents as finished
+            for (const agentState of state.agents.values()) {
+              if (agentState.status === 'running' || agentState.status === 'throttled') {
+                agentState.status = 'finished'
+                agentState.currentTool = 'done'
+              }
+            }
+            resolveWave()
+          }, waveDurationMs)
+        })
+
+        // Record this wave as a "prior result" for the scoreboard
+        const waveAgentStates = Array.from(state.agents.values())
+        const totalFlags = waveAgentStates.reduce((s, a) => s + a.flags.length, 0)
+        const totalPoints = waveAgentStates.reduce((s, a) => s + a.points, 0)
+        priorResults.push({
+          runId: state.runId,
+          mode: wave.mode,
+          model: wave.model === 'opus' ? 'claude-opus-4' : 'claude-haiku-3',
+          totalFlags,
+          totalPoints,
+          agentCount: waveAgentStates.length,
+        })
+
+        console.log(`[SIM] Wave ${waveNum} complete: ${totalFlags} flags, ${totalPoints} pts`)
+
+        // Brief pause between waves to show the transition
+        await new Promise(r => setTimeout(r, 3000))
+      }
+
+      console.log('[SIM] All waves complete. Restarting in 5 seconds...')
+      await new Promise(r => setTimeout(r, 5000))
+    }
+  }
+
+  // Start simulation in the background
+  simulationLoop().catch(err => console.error('[SIM] Error:', err))
+}
+
+if (simulate && !outputFile) {
+  runSimulation()
+  console.log('[SIM] Simulation mode active')
 }
 
 // ---------------------------------------------------------------------------
@@ -1014,5 +1321,6 @@ setInterval(updateTimer, 1000);
 serve({ fetch: app.fetch, port }, () => {
   console.log(`Dashboard: http://localhost:${port}`)
   if (outputFile) console.log(`Watching: ${outputFile}`)
-  else console.log('No --output file. Pass --output <file> to watch benchmark output.')
+  else if (simulate) console.log('Simulation mode: agents running procedurally generated challenges')
+  else console.log('No --output file. Pass --output <file> or --simulate for demo mode.')
 })

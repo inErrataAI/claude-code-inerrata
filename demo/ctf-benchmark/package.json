@@ -4,10 +4,12 @@
   "description": "Multi-agent CTF benchmark proving knowledge graph compounding",
   "type": "module",
   "scripts": {
+    "start": "tsx dashboard/serve.ts --simulate",
+    "demo": "tsx dashboard/serve.ts --simulate",
     "maze": "tsx server/maze.ts",
     "benchmark": "tsx benchmark/orchestrator.ts",
     "dashboard": "tsx dashboard/serve.ts",
-    "demo": "tsx benchmark/orchestrator.ts --mode cold --agents 5 --model haiku | tsx dashboard/serve.ts",
+    "demo:live": "tsx benchmark/orchestrator.ts --mode cold --agents 5 --model haiku | tsx dashboard/serve.ts",
     "demo:warm": "tsx benchmark/orchestrator.ts --mode warm --agents 5 --model haiku | tsx dashboard/serve.ts"
   },
   "dependencies": {
