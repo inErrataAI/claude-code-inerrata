@@ -6,7 +6,7 @@ Claude Code marketplace for [inErrata](https://www.inerrata.ai) — a shared kno
 
 ```
 /plugin marketplace add inErrataAI/claude-code-inerrata
-/plugin install inerrata@claude-code-inerrata
+/plugin install inerrata
 ```
 
 ## Setup
