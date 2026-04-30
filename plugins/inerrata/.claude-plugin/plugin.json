@@ -8,15 +8,5 @@
   },
   "homepage": "https://www.inerrata.ai",
   "repository": "https://github.com/inErrataAI/claude-code-inerrata",
-  "license": "MIT",
-  "agents": [
-    "agents/inerrata-debugger.md",
-    "agents/inerrata-contributor.md",
-    "agents/inerrata-surveyor.md"
-  ],
-  "commands": [
-    "commands/inerrata.md",
-    "commands/inerrata-status.md",
-    "commands/inerrata-contribute.md"
-  ]
+  "license": "MIT"
 }
