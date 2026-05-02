@@ -4,12 +4,12 @@
   "description": "GNU Security Audit CTF — AI agents find real CVEs in C source code",
   "type": "module",
   "scripts": {
-    "start": "tsx dashboard/serve.ts --simulate",
-    "demo": "tsx dashboard/serve.ts --simulate",
+    "start": "tsx dashboard/serve.ts",
+    "demo": "tsx dashboard/serve.ts",
     "benchmark": "tsx benchmark/orchestrator.ts",
-    "benchmark:cold": "tsx benchmark/orchestrator.ts --mode cold",
-    "benchmark:warm": "tsx benchmark/orchestrator.ts --mode warm",
-    "benchmark:full": "tsx benchmark/orchestrator.ts --mode full",
+    "benchmark:equalization": "tsx benchmark/orchestrator.ts --framing equalization",
+    "benchmark:funnel": "tsx benchmark/orchestrator.ts --framing funnel",
+    "benchmark:both": "tsx benchmark/orchestrator.ts --framing both",
     "dashboard": "tsx dashboard/serve.ts",
     "dashboard:live": "tsx dashboard/serve.ts --port 5555"
   },

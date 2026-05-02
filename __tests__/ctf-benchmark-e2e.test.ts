@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, afterAll, beforeAll } from 'vitest';
 import { execSync, spawn, ChildProcess } from 'child_process';
 import { join } from 'path';
 import { createConnection } from 'net';
+import { parseConfig, framingsToRun } from '../demo/ctf-benchmark/benchmark/orchestrator';
 
 const CTF_DIR = join(__dirname, '..', 'demo', 'ctf-benchmark');
 
@@ -152,6 +153,9 @@ describe('CTF Benchmark: Key Source Files', { timeout: 10_000 }, () => {
     'challenges/registry.ts',
     'scoring/judge.ts',
     'benchmark/orchestrator.ts',
+    'benchmark/waves.ts',
+    'benchmark/mcp-config.ts',
+    'benchmark/graph.ts',
     'agents/prompts.ts',
     'agents/types.ts',
   ];
@@ -163,6 +167,46 @@ describe('CTF Benchmark: Key Source Files', { timeout: 10_000 }, () => {
       expect(existsSync(filePath)).toBe(true);
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Group 3: Framing CLI Smoke
+// ---------------------------------------------------------------------------
+
+describe('CTF Benchmark: Framing CLI', { timeout: 10_000 }, () => {
+  it('parses --framing equalization', () => {
+    const config = parseConfig(['--framing', 'equalization', '--agents-per-wave', '2', '--port', '6000']);
+    expect(config.framing).toBe('equalization');
+    expect(config.agentsPerWave).toBe(2);
+    expect(config.port).toBe(6000);
+  });
+
+  it('parses --framing funnel', () => {
+    const config = parseConfig(['--framing', 'funnel']);
+    expect(config.framing).toBe('funnel');
+    expect(framingsToRun(config.framing)).toEqual(['funnel']);
+  });
+
+  it('parses --framing both as equalization then funnel', () => {
+    const config = parseConfig(['--framing', 'both']);
+    expect(framingsToRun(config.framing)).toEqual(['equalization', 'funnel']);
+  });
+
+  it('orchestrator source emits auth and model in wave_started payload', () => {
+    const { readFileSync } = require('fs');
+    const source = readFileSync(join(CTF_DIR, 'benchmark', 'orchestrator.ts'), 'utf-8');
+    expect(source).toContain("broadcastSSE('wave_started'");
+    expect(source).toContain('auth: wave.auth');
+    expect(source).toContain('model: wave.model');
+  });
+
+  it('orchestrator writes expected result files', () => {
+    const { readFileSync } = require('fs');
+    const source = readFileSync(join(CTF_DIR, 'benchmark', 'orchestrator.ts'), 'utf-8');
+    expect(source).toContain('comparison.json');
+    expect(source).toContain('summary.md');
+    expect(source).toContain('wave-${wave.number}-${wave.label}.json');
+  });
 });
 
 // ---------------------------------------------------------------------------

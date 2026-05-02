@@ -26,5 +26,5 @@ npx tsx dashboard/serve.ts --port ${PORT:-5555}
 The dashboard connects to the orchestrator's SSE endpoint and shows:
 - **Agent status cards:** progress through challenges, current activity
 - **Scoring timeline:** findings scored in real-time
-- **Generation comparison:** cold vs warm performance curves
+- **Wave comparison:** equalization or funnel performance curves
 - **Knowledge graph:** techniques accumulated across runs

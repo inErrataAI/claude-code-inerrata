@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync, readdirSync } from 'fs';
+import { readFileSync, existsSync, readdirSync, mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'os';
+import { buildMcpConfig } from '../demo/ctf-benchmark/benchmark/mcp-config';
+import { EQUALIZATION_WAVES, FUNNEL_WAVES } from '../demo/ctf-benchmark/benchmark/waves';
+import { buildSystemPrompt } from '../demo/ctf-benchmark/agents/prompts';
 
 const REPO_ROOT = join(__dirname, '..');
 const MARKETPLACE_JSON = join(REPO_ROOT, '.claude-plugin', 'marketplace.json');
@@ -343,5 +347,89 @@ describe('No Naming Collisions', () => {
 
     const collisions = ctfDirs.filter(d => inerrataDirs.has(d));
     expect(collisions).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Group 7: Framing Wave Contract
+// ---------------------------------------------------------------------------
+describe('CTF Framing Wave Contract', () => {
+  it('buildMcpConfig none writes empty mcpServers', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctf-mcp-'));
+    try {
+      const path = buildMcpConfig({ auth: 'none', resultsDir: dir, agentId: 'none' });
+      const config = JSON.parse(readFileSync(path, 'utf-8'));
+      expect(config).toEqual({ mcpServers: {} });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('buildMcpConfig anonymous writes URL-only config', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctf-mcp-'));
+    try {
+      const path = buildMcpConfig({ auth: 'anonymous', resultsDir: dir, agentId: 'anon' });
+      const config = JSON.parse(readFileSync(path, 'utf-8'));
+      expect(config.mcpServers.inerrata.url).toBe('https://mcp.inerrata.ai/mcp');
+      expect(config.mcpServers.inerrata.headers).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('buildMcpConfig authenticated writes bearer header', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctf-mcp-'));
+    try {
+      const path = buildMcpConfig({ auth: 'authenticated', apiKey: 'err_test', resultsDir: dir, agentId: 'auth' });
+      const config = JSON.parse(readFileSync(path, 'utf-8'));
+      expect(config.mcpServers.inerrata.headers.Authorization).toBe('Bearer err_test');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('buildMcpConfig authenticated without apiKey throws', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctf-mcp-'));
+    try {
+      expect(() => buildMcpConfig({ auth: 'authenticated', resultsDir: dir, agentId: 'auth' })).toThrow(/apiKey/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('buildSystemPrompt with auth none has no inErrata section', () => {
+    const prompt = buildSystemPrompt(EQUALIZATION_WAVES[1]);
+    expect(prompt).not.toMatch(/inErrata/i);
+    expect(prompt).not.toMatch(/mcp__inerrata__/);
+  });
+
+  it('buildSystemPrompt with anonymous includes read-only tool list', () => {
+    const prompt = buildSystemPrompt(EQUALIZATION_WAVES[2]);
+    expect(prompt).toContain('read-only');
+    expect(prompt).toContain('mcp__inerrata__search');
+    expect(prompt).toContain('mcp__inerrata__burst');
+    expect(prompt).not.toContain('call mcp__inerrata__contribute');
+  });
+
+  it('buildSystemPrompt with authenticated includes full behavioral template', () => {
+    const prompt = buildSystemPrompt(EQUALIZATION_WAVES[0]);
+    expect(prompt).toContain('Knowledge Graph for AI Agents');
+    expect(prompt).toContain('mcp__inerrata__contribute');
+  });
+
+  it('EQUALIZATION_WAVES has 4 waves with correct model/auth combos', () => {
+    expect(EQUALIZATION_WAVES.map(w => [w.label, w.model, w.auth])).toEqual([
+      ['opus-cold', 'opus', 'authenticated'],
+      ['haiku-cold', 'haiku', 'none'],
+      ['haiku-anon', 'haiku', 'anonymous'],
+      ['haiku-warm', 'haiku', 'authenticated'],
+    ]);
+    expect(EQUALIZATION_WAVES.map(w => w.number)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('FUNNEL_WAVES has 3 same-model waves with escalating auth', () => {
+    expect(FUNNEL_WAVES.map(w => w.model)).toEqual(['sonnet', 'sonnet', 'sonnet']);
+    expect(FUNNEL_WAVES.map(w => w.auth)).toEqual(['none', 'anonymous', 'authenticated']);
+    expect(FUNNEL_WAVES.map(w => w.number)).toEqual([1, 2, 3]);
   });
 });

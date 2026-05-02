@@ -1,38 +1,46 @@
 #!/usr/bin/env tsx
 /**
- * benchmark/orchestrator.ts — GNU Security Audit CTF Benchmark Orchestrator
+ * benchmark/orchestrator.ts -- GNU Security Audit CTF Benchmark Orchestrator
  *
- * Clones real GNU source repos, spawns Claude agents to audit them for known
- * CVEs, scores findings against ground truth, and serves live state via SSE
- * for the dashboard.
+ * Runs framing-based waves of Claude CLI agents against GNU CVE challenges.
  *
  * Usage:
- *   npx tsx benchmark/orchestrator.ts --mode cold
- *   npx tsx benchmark/orchestrator.ts --mode warm
- *   npx tsx benchmark/orchestrator.ts --mode full --port 5555 --results-dir ./results
+ *   npx tsx benchmark/orchestrator.ts --framing equalization --port 5555
+ *   npx tsx benchmark/orchestrator.ts --framing funnel --port 5555
+ *   npx tsx benchmark/orchestrator.ts --framing both --port 5555
  */
 import { parseArgs } from 'util';
 import { randomUUID, randomBytes } from 'crypto';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import {
-  writeFileSync, readFileSync, mkdirSync, existsSync, readdirSync,
-} from 'fs';
-import { spawn, execSync, type ChildProcess } from 'child_process';
+import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { spawn, execSync, exec, type ChildProcess } from 'child_process';
+import { promisify } from 'util';
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import type {
-  Challenge, AgentConfig, Finding, ScoredFinding,
-  AgentRunResult, ModelTier,
-} from '../agents/types.js';
-import { MODEL_IDS } from '../agents/types.js';
-import { buildSystemPrompt, buildRepoChallengesPrompt } from '../agents/prompts.js';
-import { CHALLENGES, REPOS, getChallengesByRepo } from '../challenges/registry.js';
-import { scoreFinding, scoreAllFindings, isSolved } from '../scoring/judge.js';
+  AgentConfig,
+  AgentRunResult,
+  AgentState,
+  BenchmarkFraming,
+  Challenge,
+  DashboardState,
+  Difficulty,
+  Finding,
+  FlagEvent,
+  ModelTier,
+  ScoredFinding,
+  Wave,
+  WaveConfig,
+} from '../shared/types.js';
+import { buildSystemPrompt, buildChallengePrompt } from '../agents/prompts.js';
+import { CHALLENGES, REPOS } from '../challenges/registry.js';
+import { scoreAllFindings, isSolved } from '../scoring/judge.js';
+import { buildMcpConfig } from './mcp-config.js';
+import { drainExtraction, snapshotGraph, wipeCtfNodes } from './graph.js';
+import { EQUALIZATION_WAVES, FUNNEL_WAVES, wavesForFraming } from './waves.js';
 
-// ---------------------------------------------------------------------------
-// Path setup
-// ---------------------------------------------------------------------------
+const execAsync = promisify(exec);
 
 const __dirname = typeof import.meta.dirname === 'string'
   ? import.meta.dirname
@@ -40,124 +48,119 @@ const __dirname = typeof import.meta.dirname === 'string'
 
 const PROJECT_ROOT = resolve(__dirname, '..');
 
-// ---------------------------------------------------------------------------
-// CLI args
-// ---------------------------------------------------------------------------
+export type FramingCli = BenchmarkFraming | 'both';
 
-type BenchmarkMode = 'cold' | 'warm' | 'full';
-
-interface BenchmarkConfig {
-  mode: BenchmarkMode;
+export interface BenchmarkConfig {
+  framing: FramingCli;
   port: number;
   resultsDir: string;
   reposDir: string;
   timeoutMinutes: number;
+  agentsPerWave: number;
+  maxDifficulty?: Difficulty;
+  challengeId?: string;
 }
 
-function parseConfig(): BenchmarkConfig {
+export function parseConfig(argv: string[] = process.argv.slice(2)): BenchmarkConfig {
   const { values } = parseArgs({
+    args: argv,
     options: {
-      mode:           { type: 'string', default: 'cold' },
-      port:           { type: 'string', default: '5555' },
-      'results-dir':  { type: 'string', default: resolve(PROJECT_ROOT, 'results') },
-      'repos-dir':    { type: 'string', default: resolve(PROJECT_ROOT, 'repos') },
-      timeout:        { type: 'string', default: '30' },
+      framing: { type: 'string', default: 'equalization' },
+      port: { type: 'string', default: '5555' },
+      'results-dir': { type: 'string', default: resolve(PROJECT_ROOT, 'results') },
+      'repos-dir': { type: 'string', default: resolve(PROJECT_ROOT, 'repos') },
+      timeout: { type: 'string', default: '30' },
+      'agents-per-wave': { type: 'string', default: '1' },
+      'max-difficulty': { type: 'string' },
+      challenge: { type: 'string' },
     },
   });
 
-  const mode = values.mode as BenchmarkMode;
-  if (!['cold', 'warm', 'full'].includes(mode)) {
-    throw new Error(`Invalid mode: ${mode}. Must be cold, warm, or full.`);
+  const framing = values.framing as FramingCli;
+  if (!['equalization', 'funnel', 'both'].includes(framing)) {
+    throw new Error(`Invalid framing: ${framing}. Must be equalization, funnel, or both.`);
+  }
+
+  const maxDiff = values['max-difficulty']
+    ? parseInt(values['max-difficulty'], 10) as Difficulty
+    : undefined;
+  if (maxDiff !== undefined && ![1, 2, 3, 4, 5].includes(maxDiff)) {
+    throw new Error(`Invalid --max-difficulty: ${maxDiff}. Must be 1-5.`);
+  }
+
+  const agentsPerWave = parseInt(values['agents-per-wave']!, 10);
+  if (!Number.isFinite(agentsPerWave) || agentsPerWave < 1) {
+    throw new Error(`Invalid --agents-per-wave: ${values['agents-per-wave']}. Must be >= 1.`);
   }
 
   return {
-    mode,
+    framing,
     port: parseInt(values.port!, 10),
     resultsDir: values['results-dir']!,
     reposDir: values['repos-dir']!,
     timeoutMinutes: parseInt(values.timeout!, 10),
+    agentsPerWave,
+    maxDifficulty: maxDiff,
+    challengeId: values.challenge,
   };
 }
 
-// ---------------------------------------------------------------------------
-// Dashboard-compatible state (matches DashState in dashboard/serve.ts)
-// ---------------------------------------------------------------------------
-
-interface AgentState {
-  id: string;
-  shortId: string;
-  handle: string;
-  toolCalls: number;
-  maxCalls: number;
-  flags: string[];
-  currentTool: string;
-  status: 'running' | 'finished' | 'failed' | 'throttled';
-  errors: number;
-  graphHits: number;
-  lastActivity: number;
-  points: number;
+export function framingsToRun(framing: FramingCli): BenchmarkFraming[] {
+  return framing === 'both' ? ['equalization', 'funnel'] : [framing];
 }
 
-interface DashState {
-  agents: Map<string, AgentState>;
-  flagTimeline: Array<{ time: number; agentId: string; challenge: string; points: number }>;
-  toolCallLog: Array<{ time: number; agentId: string; tool: string }>;
-  startTime: number;
-  runId: string;
-  target: string;
-  mode: string;
-  model: string;
-  totalChallenges: number;
-  seed: string;
-}
+let runId = randomUUID();
+let activeFraming: BenchmarkFraming | undefined;
+let activeChallenges: Challenge[] = CHALLENGES;
 
-let dashState: DashState = {
-  agents: new Map(),
-  flagTimeline: [],
-  toolCallLog: [],
-  startTime: Date.now(),
-  runId: '',
-  target: 'gnu-source-audit',
-  mode: '',
-  model: '',
-  totalChallenges: CHALLENGES.length,
-  seed: '',
-};
-
-// SSE connections
+const agentStates: Record<string, AgentState> = {};
+const waves: Wave[] = [];
+const flags: FlagEvent[] = [];
 const sseClients: Set<ReadableStreamDefaultController> = new Set();
+
+function resetDashboardState(framing?: BenchmarkFraming) {
+  runId = randomUUID();
+  activeFraming = framing;
+  for (const key of Object.keys(agentStates)) delete agentStates[key];
+  waves.length = 0;
+  flags.length = 0;
+}
+
+function buildDashboardState(): DashboardState {
+  return {
+    agents: { ...agentStates },
+    challenges: activeChallenges,
+    waves: [...waves],
+    currentWave: waves.length > 0 ? waves[waves.length - 1].number : 0,
+    flags: [...flags],
+    runId: runId.slice(0, 8),
+    framing: activeFraming,
+  };
+}
 
 function broadcastSSE(event: string, data: unknown) {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const ctrl of sseClients) {
-    try { ctrl.enqueue(new TextEncoder().encode(payload)); } catch { sseClients.delete(ctrl); }
+    try {
+      ctrl.enqueue(new TextEncoder().encode(payload));
+    } catch {
+      sseClients.delete(ctrl);
+    }
   }
 }
-
-// ---------------------------------------------------------------------------
-// SSE server (Hono)
-// ---------------------------------------------------------------------------
 
 function startSSEServer(port: number) {
   const app = new Hono();
 
-  // Serialize DashState for API (Map -> object)
-  function serializeState() {
-    return {
-      ...dashState,
-      agents: Object.fromEntries(dashState.agents),
-    };
-  }
+  app.get('/api/state', (c) => c.json(buildDashboardState()));
 
-  app.get('/api/state', (c) => c.json(serializeState()));
-
-  app.get('/api/events', (c) => {
+  app.get('/api/events', () => {
     const stream = new ReadableStream({
       start(controller) {
         sseClients.add(controller);
-        // Send initial state
-        const payload = `event: state\ndata: ${JSON.stringify(serializeState())}\n\n`;
-        controller.enqueue(new TextEncoder().encode(payload));
+        controller.enqueue(new TextEncoder().encode(
+          `event: state\ndata: ${JSON.stringify(buildDashboardState())}\n\n`,
+        ));
       },
       cancel(controller) {
         sseClients.delete(controller);
@@ -180,11 +183,7 @@ function startSSEServer(port: number) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Repository cloning
-// ---------------------------------------------------------------------------
-
-function cloneOrUpdateRepo(repoName: string, repoUrl: string, reposDir: string): string {
+async function cloneOrUpdateRepo(repoName: string, repoUrl: string, reposDir: string): Promise<string> {
   const repoPath = resolve(reposDir, repoName);
   mkdirSync(reposDir, { recursive: true });
 
@@ -194,35 +193,23 @@ function cloneOrUpdateRepo(repoName: string, repoUrl: string, reposDir: string):
   }
 
   console.log(`[repos] Cloning ${repoName} from ${repoUrl}...`);
-  execSync(`git clone --depth 50 --no-single-branch "${repoUrl}" "${repoPath}"`, {
-    stdio: 'inherit',
-    timeout: 300_000, // 5 min max
-  });
+  await execAsync(`git clone "${repoUrl}" "${repoPath}"`, { timeout: 600_000 });
   console.log(`[repos] ${repoName}: cloned`);
   return repoPath;
 }
 
 function checkoutVersion(repoPath: string, tag: string): void {
   try {
-    execSync(`git checkout "${tag}" --force`, {
-      cwd: repoPath,
-      stdio: 'pipe',
-      timeout: 30_000,
-    });
+    execSync(`git checkout "${tag}" --force`, { cwd: repoPath, stdio: 'pipe', timeout: 30_000 });
     console.log(`[repos] Checked out ${tag}`);
   } catch {
-    // Try fetching the tag first
     try {
       execSync(`git fetch origin "refs/tags/${tag}:refs/tags/${tag}"`, {
         cwd: repoPath,
         stdio: 'pipe',
         timeout: 60_000,
       });
-      execSync(`git checkout "${tag}" --force`, {
-        cwd: repoPath,
-        stdio: 'pipe',
-        timeout: 30_000,
-      });
+      execSync(`git checkout "${tag}" --force`, { cwd: repoPath, stdio: 'pipe', timeout: 30_000 });
       console.log(`[repos] Fetched and checked out ${tag}`);
     } catch (err) {
       console.warn(`[repos] WARNING: Could not checkout ${tag}: ${err}`);
@@ -230,61 +217,84 @@ function checkoutVersion(repoPath: string, tag: string): void {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Agent spawning
-// ---------------------------------------------------------------------------
-
-function buildMcpConfig(resultsDir: string): string {
-  const config = {
-    mcpServers: {
-      inerrata: {
-        type: 'http',
-        url: 'https://inerrata.ai/mcp',
-        headers: {
-          Authorization: `Bearer ${process.env.INERRATA_API_KEY ?? ''}`,
-        },
-      },
-    },
+function spriteForWave(wave: WaveConfig): string {
+  const base: Record<ModelTier, string> = {
+    opus: 'opus-wizard',
+    sonnet: 'sonnet-bard',
+    haiku: 'haiku-rogue',
   };
-  mkdirSync(resultsDir, { recursive: true });
-  const configPath = resolve(resultsDir, `mcp-${randomBytes(4).toString('hex')}.json`);
-  writeFileSync(configPath, JSON.stringify(config));
-  return configPath;
+  return `${base[wave.model]} ${wave.spriteType}`;
 }
 
 function spawnAuditAgent(opts: {
   agent: AgentConfig;
+  wave: WaveConfig;
   systemPrompt: string;
   challengePrompt: string;
   repoPath: string;
   mcpConfigPath: string;
 }): ChildProcess {
-  const modelId = MODEL_IDS[opts.agent.model];
-
   const args: string[] = [
     '--print',
-    '--model', modelId,
+    '--verbose',
+    '--output-format', 'stream-json',
+    '--effort', 'max',
+    '--model', opts.wave.modelId,
     '--dangerously-skip-permissions',
-    '--max-turns', '25',
+    '--max-turns', '35',
     '--mcp-config', opts.mcpConfigPath,
+    '--plugin-dir', PROJECT_ROOT,
+    '--system-prompt', opts.systemPrompt,
+    '-p', opts.challengePrompt,
   ];
-
-  args.push('--system-prompt', opts.systemPrompt);
-  args.push(opts.challengePrompt);
 
   return spawn('claude', args, {
     cwd: opts.repoPath,
     env: {
       ...process.env,
       INERRATA_API_KEY: process.env.INERRATA_API_KEY ?? '',
+      CTF_WAVE_LABEL: opts.wave.label,
+      CTF_CAN_CONTRIBUTE: opts.wave.canContribute ? 'true' : 'false',
+      CTF_AGENT_SOURCE: `ctf-bench-${opts.wave.label}-${opts.agent.id}`,
     },
-    stdio: ['pipe', 'pipe', 'pipe'],
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
 
-// ---------------------------------------------------------------------------
-// Parse findings from agent output
-// ---------------------------------------------------------------------------
+function parseStreamJson(raw: string): {
+  text: string;
+  toolCalls: string[];
+} {
+  const text: string[] = [];
+  const toolCalls: string[] = [];
+
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      const obj = JSON.parse(line);
+
+      if (obj.type === 'assistant' && obj.message?.content) {
+        for (const block of obj.message.content) {
+          if (block.type === 'text') text.push(block.text);
+          if (block.type === 'tool_use') toolCalls.push(block.name);
+        }
+      }
+
+      if (obj.type === 'tool_use') {
+        toolCalls.push(obj.name || obj.tool || 'unknown');
+      }
+
+      if (obj.type === 'tool_result' || obj.type === 'result') {
+        if (obj.result) text.push(typeof obj.result === 'string' ? obj.result : JSON.stringify(obj.result));
+        if (obj.content) text.push(typeof obj.content === 'string' ? obj.content : JSON.stringify(obj.content));
+      }
+    } catch {
+      text.push(line);
+    }
+  }
+
+  return { text: text.join('\n'), toolCalls };
+}
 
 function parseFindings(output: string, agentId: string): Finding[] {
   const findings: Finding[] = [];
@@ -308,17 +318,12 @@ function parseFindings(output: string, agentId: string): Finding[] {
         crossRepoPattern: raw.crossRepoPattern,
       });
     } catch {
-      // Malformed JSON in finding block -- skip
       console.warn(`[orchestrator] Failed to parse finding block from ${agentId}`);
     }
   }
 
   return findings;
 }
-
-// ---------------------------------------------------------------------------
-// Collect output from a spawned process
-// ---------------------------------------------------------------------------
 
 function collectProcessOutput(
   child: ChildProcess,
@@ -357,388 +362,495 @@ function collectProcessOutput(
   });
 }
 
-// ---------------------------------------------------------------------------
-// Run one agent through all challenges for a repo
-// ---------------------------------------------------------------------------
+function ensureAgentState(agent: AgentConfig, wave: WaveConfig, challenge: Challenge): AgentState {
+  if (!agentStates[agent.id]) {
+    agentStates[agent.id] = {
+      id: agent.id,
+      name: agent.name,
+      model: agent.model,
+      auth: agent.auth,
+      waveLabel: wave.label,
+      sprite: spriteForWave(wave),
+      status: 'running',
+      currentChallenge: challenge.id,
+      currentRepo: challenge.repo,
+      flagsCaptured: 0,
+      totalPoints: 0,
+      toolCalls: 0,
+      graphHits: 0,
+      findings: [],
+      wave: wave.number,
+    };
+  }
 
-async function runAgentForRepo(opts: {
+  const state = agentStates[agent.id];
+  state.status = 'running';
+  state.currentChallenge = challenge.id;
+  state.currentRepo = challenge.repo;
+  state.wave = wave.number;
+  return state;
+}
+
+function classifyToolCalls(toolCalls: string[]): { graphQueries: number; graphContributions: number; graphHits: number } {
+  const queryNames = new Set([
+    'search', 'burst', 'explore', 'expand', 'browse', 'get_node', 'graph_initialize',
+    'trace', 'similar', 'why', 'guide', 'flow',
+  ]);
+  const writeNames = new Set([
+    'contribute', 'validate_solution', 'report_failure', 'learn', 'correct', 'vote',
+    'ask', 'answer',
+  ]);
+
+  let graphQueries = 0;
+  let graphContributions = 0;
+
+  for (const rawName of toolCalls) {
+    const name = rawName.replace(/^mcp__inerrata__/, '');
+    if (queryNames.has(name)) graphQueries++;
+    if (writeNames.has(name)) graphContributions++;
+  }
+
+  return {
+    graphQueries,
+    graphContributions,
+    graphHits: graphQueries + graphContributions,
+  };
+}
+
+async function runAgentForChallenge(opts: {
   agent: AgentConfig;
-  repoName: string;
+  wave: WaveConfig;
+  challenge: Challenge;
   repoPath: string;
-  challenges: Challenge[];
   config: BenchmarkConfig;
+  framingResultsDir: string;
   mcpConfigPath: string;
-}): Promise<AgentRunResult> {
-  const { agent, repoName, repoPath, challenges, config } = opts;
+}): Promise<{ findings: ScoredFinding[]; graphQueries: number; graphContributions: number }> {
+  const { agent, wave, challenge, repoPath, config, framingResultsDir } = opts;
+  const agentState = ensureAgentState(agent, wave, challenge);
   const startTime = Date.now();
 
-  // Register agent in dashboard state
-  const agentState: AgentState = {
-    id: agent.id,
-    shortId: agent.id.slice(0, 8),
-    handle: agent.name,
-    toolCalls: 0,
-    maxCalls: 25,
-    flags: [],
-    currentTool: 'auditing',
-    status: 'running',
-    errors: 0,
-    graphHits: 0,
-    lastActivity: Date.now(),
-    points: 0,
-  };
-  dashState.agents.set(agent.id, agentState);
-  broadcastSSE('agent_started', {
+  broadcastSSE('agent_challenge_start', {
     agentId: agent.id,
-    handle: agent.name,
-    model: MODEL_IDS[agent.model],
-    mode: agent.mode,
+    challengeId: challenge.id,
+    model: agent.model,
+    auth: agent.auth,
+    wave: wave.number,
+    label: wave.label,
   });
 
-  // Checkout the vulnerable version for the first challenge
-  // (all challenges for the same repo should use the same version,
-  //  but if they differ, we just use the first one)
-  checkoutVersion(repoPath, challenges[0].affectedVersion);
-
-  const systemPrompt = buildSystemPrompt();
-  const challengePrompt = buildRepoChallengesPrompt(challenges);
-
-  console.log(`[agent:${agent.name}] Spawning for ${repoName} (${challenges.length} challenges)...`);
+  checkoutVersion(repoPath, challenge.affectedVersion);
 
   const child = spawnAuditAgent({
     agent,
-    systemPrompt,
-    challengePrompt,
+    wave,
+    systemPrompt: buildSystemPrompt(wave),
+    challengePrompt: buildChallengePrompt(challenge, wave),
     repoPath,
     mcpConfigPath: opts.mcpConfigPath,
   });
 
-  // Stream stderr for live progress
-  child.stderr?.on('data', (d: Buffer) => {
-    const s = d.toString().trim();
-    if (s) {
-      console.error(`[agent:${agent.name}] ${s}`);
-      agentState.lastActivity = Date.now();
-      agentState.toolCalls++;
-      dashState.toolCallLog.push({
-        time: Date.now(),
-        agentId: agent.id,
-        tool: 'audit',
-      });
-      broadcastSSE('tool_call', { agentId: agent.id, tool: 'audit' });
-    }
+  child.stderr?.on('data', (chunk: Buffer) => {
+    const text = chunk.toString().trim();
+    if (!text) return;
+    agentState.toolCalls++;
+    broadcastSSE('tool_call', { agentId: agent.id, tool: 'audit', challengeId: challenge.id });
   });
 
-  const timeoutMs = config.timeoutMinutes * 60_000;
-  const { stdout, stderr, exitCode } = await collectProcessOutput(child, timeoutMs);
-  const endTime = Date.now();
+  const { stdout, stderr, exitCode } = await collectProcessOutput(child, config.timeoutMinutes * 60_000);
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`[agent:${agent.name}] ${challenge.id} finished exit=${exitCode} in ${elapsed}s`);
+  if (stderr.trim()) console.warn(`[agent:${agent.name}] stderr: ${stderr.trim().slice(0, 500)}`);
 
-  console.log(`[agent:${agent.name}] Finished (exit=${exitCode}, ${((endTime - startTime) / 1000).toFixed(1)}s)`);
+  writeFileSync(resolve(framingResultsDir, `${agent.id}-${challenge.id}.ndjson`), stdout);
 
-  // Parse and score findings
-  const rawFindings = parseFindings(stdout, agent.id);
-  const scoredFindings = scoreAllFindings(rawFindings);
-  const totalScore = scoredFindings.reduce((sum, f) => sum + f.scores.total, 0);
-  const solved = scoredFindings.filter(isSolved);
+  const parsed = parseStreamJson(stdout);
+  writeFileSync(resolve(framingResultsDir, `${agent.id}-${challenge.id}.txt`), parsed.text);
 
-  // Update dashboard state
-  agentState.status = exitCode === 0 ? 'finished' : 'failed';
-  agentState.currentTool = 'done';
-  agentState.points = totalScore;
-  for (const sf of solved) {
-    agentState.flags.push(sf.challengeId);
-    dashState.flagTimeline.push({
-      time: sf.timestamp,
-      agentId: agent.id,
-      challenge: sf.challengeId,
-      points: sf.scores.total,
-    });
+  const classified = classifyToolCalls(parsed.toolCalls);
+  agentState.toolCalls += parsed.toolCalls.length;
+  agentState.graphHits += classified.graphHits;
+
+  for (const toolName of parsed.toolCalls) {
+    if (toolName.includes('inerrata')) {
+      broadcastSSE('graph_hit', { agentId: agent.id, challengeId: challenge.id, tool: toolName });
+    }
   }
 
-  broadcastSSE('agent_finished', {
-    agentId: agent.id,
-    handle: agent.name,
-    findings: scoredFindings.length,
-    solved: solved.length,
-    totalScore,
-    status: agentState.status,
-  });
+  const rawFindings = parseFindings(parsed.text, agent.id);
+  const scoredFindings = scoreAllFindings(rawFindings);
 
-  // Log finding details
-  for (const sf of scoredFindings) {
-    const solvedStr = isSolved(sf) ? 'SOLVED' : 'partial';
-    console.log(
-      `  [${solvedStr}] ${sf.challengeId}: ` +
-      `loc=${sf.scores.location} expl=${sf.scores.explanation} ` +
-      `poc=${sf.scores.poc} patch=${sf.scores.patch} cross=${sf.scores.crossRepo} ` +
-      `total=${sf.scores.total}`
-    );
+  for (const finding of scoredFindings) {
+    agentState.findings.push(finding);
+    agentState.totalPoints += finding.scores.total;
+
+    if (isSolved(finding)) {
+      agentState.flagsCaptured++;
+      const flagEvent: FlagEvent = {
+        agentId: agent.id,
+        challengeId: finding.challengeId,
+        points: finding.scores.total,
+        timestamp: finding.timestamp,
+        wave: wave.number,
+        waveLabel: wave.label,
+      };
+      flags.push(flagEvent);
+      broadcastSSE('flag_captured', flagEvent);
+    }
   }
 
   return {
-    agent,
-    startTime,
-    endTime,
     findings: scoredFindings,
-    totalScore,
-    challengesAttempted: challenges.length,
-    challengesSolved: solved.length,
-    graphQueries: 0,
-    graphContributions: 0,
+    graphQueries: classified.graphQueries,
+    graphContributions: classified.graphContributions,
   };
 }
 
-// ---------------------------------------------------------------------------
-// Wave runner: spawn 3 agents (one per model tier) in parallel
-// ---------------------------------------------------------------------------
+async function prepareRepos(challenges: Challenge[], reposDir: string): Promise<Map<string, string>> {
+  const repoPaths = new Map<string, string>();
+  const uniqueRepos = [...new Set(challenges.map(ch => ch.repo))];
+
+  await Promise.all(uniqueRepos.map(async (repo) => {
+    const repoUrl = REPOS[repo];
+    if (!repoUrl) return;
+    try {
+      repoPaths.set(repo, await cloneOrUpdateRepo(repo, repoUrl, reposDir));
+    } catch (err) {
+      console.error(`[orchestrator] Failed to clone ${repo}: ${err}`);
+    }
+  }));
+
+  return repoPaths;
+}
 
 async function runWave(opts: {
-  waveNum: number;
-  mode: 'cold' | 'warm';
+  wave: WaveConfig;
+  framing: BenchmarkFraming;
   challenges: Challenge[];
   config: BenchmarkConfig;
+  framingResultsDir: string;
+  repoPaths: Map<string, string>;
 }): Promise<AgentRunResult[]> {
-  const { waveNum, mode, challenges, config } = opts;
-  const tiers: ModelTier[] = ['opus', 'sonnet', 'haiku'];
+  const { wave, challenges, config, framingResultsDir, repoPaths } = opts;
+  const apiKey = process.env.INERRATA_API_KEY ?? '';
 
-  console.log(`\n${'='.repeat(60)}`);
-  console.log(`  Wave ${waveNum}: ${mode.toUpperCase()} (${tiers.join(', ')})`);
-  console.log(`${'='.repeat(60)}\n`);
+  console.log(`\n${'='.repeat(72)}`);
+  console.log(`  Wave ${wave.number}: ${wave.label} (${wave.model}, auth=${wave.auth})`);
+  console.log(`  ${wave.description}`);
+  console.log(`${'='.repeat(72)}\n`);
+
+  const waveRecord: Wave = {
+    number: wave.number,
+    label: wave.label,
+    mode: wave.auth,
+    auth: wave.auth,
+    model: wave.model,
+    modelId: wave.modelId,
+    canContribute: wave.canContribute,
+    graphState: wave.graphState,
+    description: wave.description,
+    challenges: challenges.map(c => c.id),
+    scores: {},
+    startTime: Date.now(),
+  };
+  waves.push(waveRecord);
 
   broadcastSSE('wave_started', {
-    wave: waveNum,
-    mode,
-    models: tiers,
-    challengeCount: challenges.length,
+    wave: wave.number,
+    label: wave.label,
+    model: wave.model,
+    modelId: wave.modelId,
+    auth: wave.auth,
+    description: wave.description,
+    canContribute: wave.canContribute,
   });
 
-  // Group challenges by repo
-  const byRepo = new Map<string, Challenge[]>();
-  for (const ch of challenges) {
-    const list = byRepo.get(ch.repo) ?? [];
-    list.push(ch);
-    byRepo.set(ch.repo, list);
+  const agents: AgentConfig[] = [];
+  for (let i = 0; i < config.agentsPerWave; i++) {
+    const suffix = config.agentsPerWave === 1 ? randomBytes(3).toString('hex') : `a${i + 1}-${randomBytes(2).toString('hex')}`;
+    const agent: AgentConfig = {
+      id: `${wave.label}-w${wave.number}-${suffix}`,
+      name: `${wave.label}${config.agentsPerWave > 1 ? `-${i + 1}` : ''}`,
+      model: wave.model,
+      auth: wave.auth,
+      wave: wave.number,
+      waveLabel: wave.label,
+      spriteType: wave.spriteType,
+      canContribute: wave.canContribute,
+    };
+    agents.push(agent);
+    waveRecord.scores[agent.id] = {};
   }
 
-  // ALL agents get inErrata MCP access.
-  // Cold agents start with an empty graph and contribute findings as they go.
-  // Warm agents query a graph populated by prior cold-run contributions.
-  const mcpConfigPath = buildMcpConfig(config.resultsDir);
+  const trackers = new Map<string, {
+    findings: ScoredFinding[];
+    challengesAttempted: number;
+    challengesSolved: number;
+    graphQueries: number;
+    graphContributions: number;
+    startTime: number;
+  }>();
 
-  // Each agent processes all repos sequentially (challenges within each repo are batched)
-  const agentPromises: Promise<AgentRunResult>[] = [];
+  for (const agent of agents) {
+    trackers.set(agent.id, {
+      findings: [],
+      challengesAttempted: 0,
+      challengesSolved: 0,
+      graphQueries: 0,
+      graphContributions: 0,
+      startTime: Date.now(),
+    });
+  }
 
-  for (const tier of tiers) {
-    const agentId = `${tier}-${mode}-w${waveNum}-${randomBytes(3).toString('hex')}`;
-    const agent: AgentConfig = {
-      id: agentId,
-      name: `${tier}-${mode}-w${waveNum}`,
-      model: tier,
-      mode,
-      spriteType: tier,
-    };
+  for (const agent of agents) {
+    const mcpConfigPath = buildMcpConfig({
+      auth: wave.auth,
+      apiKey,
+      resultsDir: framingResultsDir,
+      agentId: agent.id,
+    });
 
-    // Run all repos sequentially for this agent
-    const agentWork = async (): Promise<AgentRunResult> => {
-      const allFindings: ScoredFinding[] = [];
-      let totalChallengesAttempted = 0;
-      let totalChallengesSolved = 0;
-      let graphQueries = 0;
-      let graphContributions = 0;
-      const agentStartTime = Date.now();
-
-      for (const [repoName, repoChallenges] of byRepo) {
-        const repoUrl = REPOS[repoName];
-        if (!repoUrl) continue;
-
-        const repoPath = cloneOrUpdateRepo(repoName, repoUrl, config.reposDir);
-
-        const result = await runAgentForRepo({
-          agent,
-          repoName,
-          repoPath,
-          challenges: repoChallenges,
-          config,
-          mcpConfigPath,
-        });
-
-        allFindings.push(...result.findings);
-        totalChallengesAttempted += result.challengesAttempted;
-        totalChallengesSolved += result.challengesSolved;
-        graphQueries += result.graphQueries;
-        graphContributions += result.graphContributions;
+    for (const challenge of challenges) {
+      const repoPath = repoPaths.get(challenge.repo);
+      if (!repoPath) {
+        console.warn(`[orchestrator] No repo path for ${challenge.repo}, skipping ${challenge.id}`);
+        continue;
       }
 
-      const totalScore = allFindings.reduce((s, f) => s + f.scores.total, 0);
-
-      return {
+      const result = await runAgentForChallenge({
         agent,
-        startTime: agentStartTime,
-        endTime: Date.now(),
-        findings: allFindings,
-        totalScore,
-        challengesAttempted: totalChallengesAttempted,
-        challengesSolved: totalChallengesSolved,
-        graphQueries,
-        graphContributions,
-      };
-    };
+        wave,
+        challenge,
+        repoPath,
+        config,
+        framingResultsDir,
+        mcpConfigPath,
+      });
 
-    agentPromises.push(agentWork());
+      const tracker = trackers.get(agent.id)!;
+      tracker.challengesAttempted++;
+      tracker.findings.push(...result.findings);
+      tracker.graphQueries += result.graphQueries;
+      tracker.graphContributions += result.graphContributions;
+
+      const bestScore = result.findings.reduce((max, finding) => Math.max(max, finding.scores.total), 0);
+      waveRecord.scores[agent.id][challenge.id] = bestScore;
+      if (result.findings.some(isSolved)) tracker.challengesSolved++;
+    }
+
+    const state = agentStates[agent.id];
+    if (state) {
+      state.status = 'finished';
+      state.currentChallenge = undefined;
+      state.currentRepo = undefined;
+    }
   }
 
-  const results = await Promise.all(agentPromises);
+  waveRecord.endTime = Date.now();
 
-  const waveTotalScore = results.reduce((s, r) => s + r.totalScore, 0);
-  const waveTotalSolved = results.reduce((s, r) => s + r.challengesSolved, 0);
-
-  broadcastSSE('wave_finished', {
-    wave: waveNum,
-    mode,
-    totalScore: waveTotalScore,
-    totalSolved: waveTotalSolved,
+  const results: AgentRunResult[] = agents.map((agent) => {
+    const tracker = trackers.get(agent.id)!;
+    return {
+      agent,
+      wave,
+      startTime: tracker.startTime,
+      endTime: Date.now(),
+      findings: tracker.findings,
+      totalScore: tracker.findings.reduce((sum, finding) => sum + finding.scores.total, 0),
+      challengesAttempted: tracker.challengesAttempted,
+      challengesSolved: tracker.challengesSolved,
+      graphQueries: tracker.graphQueries,
+      graphContributions: tracker.graphContributions,
+    };
   });
 
-  console.log(`\n  Wave ${waveNum} complete: ${waveTotalSolved} solved, ${waveTotalScore} total score\n`);
+  const totalScore = results.reduce((sum, result) => sum + result.totalScore, 0);
+  const totalSolved = results.reduce((sum, result) => sum + result.challengesSolved, 0);
+
+  writeFileSync(
+    resolve(framingResultsDir, `wave-${wave.number}-${wave.label}.json`),
+    JSON.stringify({ wave, results }, null, 2),
+  );
+
+  broadcastSSE('wave_finished', {
+    wave: wave.number,
+    label: wave.label,
+    model: wave.model,
+    auth: wave.auth,
+    totalScore,
+    totalSolved,
+  });
+
+  console.log(`[orchestrator] Wave ${wave.label} complete: ${totalSolved} solved, ${totalScore} pts`);
+  if (wave.canContribute) await drainExtraction(30_000);
 
   return results;
 }
 
-// ---------------------------------------------------------------------------
-// Result persistence
-// ---------------------------------------------------------------------------
-
-interface BenchmarkResult {
+interface FramingResult {
+  framing: BenchmarkFraming;
   runId: string;
-  config: BenchmarkConfig;
-  waves: Array<{
-    waveNum: number;
-    mode: 'cold' | 'warm';
-    results: AgentRunResult[];
-  }>;
   startedAt: string;
   completedAt: string;
+  config: BenchmarkConfig;
+  waves: Array<{ wave: WaveConfig; results: AgentRunResult[] }>;
   totalScore: number;
   totalSolved: number;
 }
 
-function saveResult(result: BenchmarkResult): string {
-  mkdirSync(result.config.resultsDir, { recursive: true });
-  const filename = `${result.runId.slice(0, 8)}-${result.config.mode}.json`;
-  const path = resolve(result.config.resultsDir, filename);
-  writeFileSync(path, JSON.stringify(result, null, 2));
-  console.log(`[orchestrator] Results saved: ${path}`);
-  return path;
+function writeComparison(result: FramingResult, resultsDir: string) {
+  const comparison = result.waves.map(({ wave, results }) => {
+    const score = results.reduce((sum, r) => sum + r.totalScore, 0);
+    const solved = results.reduce((sum, r) => sum + r.challengesSolved, 0);
+    const attempted = results.reduce((sum, r) => sum + r.challengesAttempted, 0);
+    const graphReads = results.reduce((sum, r) => sum + r.graphQueries, 0);
+    const graphWrites = results.reduce((sum, r) => sum + r.graphContributions, 0);
+
+    return {
+      wave: wave.number,
+      label: wave.label,
+      model: wave.model,
+      auth: wave.auth,
+      totalScore: score,
+      challengesSolved: solved,
+      challengesAttempted: attempted,
+      solveRate: attempted > 0 ? solved / attempted : 0,
+      graphReads,
+      graphWrites,
+    };
+  });
+
+  writeFileSync(resolve(resultsDir, 'comparison.json'), JSON.stringify(comparison, null, 2));
+
+  const lines = [
+    `# CTF Benchmark Summary - ${result.framing}`,
+    '',
+    `Run: ${result.runId.slice(0, 8)}`,
+    `Started: ${result.startedAt}`,
+    `Completed: ${result.completedAt}`,
+    '',
+    '| Wave | Label | Model | Auth | Solved | Score | Graph reads | Graph writes |',
+    '|------|-------|-------|------|--------|-------|-------------|--------------|',
+    ...comparison.map(row => `| ${row.wave} | ${row.label} | ${row.model} | ${row.auth} | ${row.challengesSolved}/${row.challengesAttempted} | ${row.totalScore} | ${row.graphReads} | ${row.graphWrites} |`),
+  ];
+
+  if (result.framing === 'equalization') {
+    const opus = comparison.find(row => row.label === 'opus-cold');
+    const haiku = comparison.find(row => row.label === 'haiku-warm');
+    if (opus && haiku) {
+      const ratio = opus.totalScore > 0 ? Math.round((haiku.totalScore / opus.totalScore) * 100) : 0;
+      lines.push('', `Haiku warm reached ${ratio}% of Opus cold score.`);
+    }
+  }
+
+  writeFileSync(resolve(resultsDir, 'summary.md'), `${lines.join('\n')}\n`);
 }
 
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
+async function runFraming(
+  framing: BenchmarkFraming,
+  config: BenchmarkConfig,
+  challenges: Challenge[],
+): Promise<FramingResult> {
+  resetDashboardState(framing);
+  activeChallenges = challenges;
+  broadcastSSE('state', buildDashboardState());
+
+  const startedAt = new Date().toISOString();
+  const framingResultsDir = resolve(config.resultsDir, framing);
+  mkdirSync(framingResultsDir, { recursive: true });
+
+  const apiKey = process.env.INERRATA_API_KEY ?? '';
+  const repoPaths = await prepareRepos(challenges, config.reposDir);
+  const graphBefore = await snapshotGraph(apiKey);
+  writeFileSync(resolve(framingResultsDir, 'graph-before.json'), JSON.stringify(graphBefore, null, 2));
+
+  const waveResults: FramingResult['waves'] = [];
+  const selectedWaves = wavesForFraming(framing);
+
+  for (const wave of selectedWaves) {
+    if (framing === 'equalization' && wave.graphState === 'empty' && wave.number === 1) {
+      await wipeCtfNodes(apiKey);
+    }
+
+    const results = await runWave({
+      wave,
+      framing,
+      challenges,
+      config,
+      framingResultsDir,
+      repoPaths,
+    });
+    waveResults.push({ wave, results });
+  }
+
+  const completedAt = new Date().toISOString();
+  const graphAfter = await snapshotGraph(apiKey);
+  writeFileSync(resolve(framingResultsDir, 'graph-after.json'), JSON.stringify(graphAfter, null, 2));
+
+  const result: FramingResult = {
+    framing,
+    runId,
+    startedAt,
+    completedAt,
+    config,
+    waves: waveResults,
+    totalScore: waveResults.reduce((sum, w) => sum + w.results.reduce((s, r) => s + r.totalScore, 0), 0),
+    totalSolved: waveResults.reduce((sum, w) => sum + w.results.reduce((s, r) => s + r.challengesSolved, 0), 0),
+  };
+
+  writeFileSync(resolve(framingResultsDir, `${runId.slice(0, 8)}-${framing}.json`), JSON.stringify(result, null, 2));
+  writeComparison(result, framingResultsDir);
+  return result;
+}
+
+function selectChallenges(config: BenchmarkConfig): Challenge[] {
+  let selected = CHALLENGES;
+  if (config.maxDifficulty) {
+    selected = selected.filter(c => c.difficulty <= config.maxDifficulty!);
+  }
+  if (config.challengeId) {
+    selected = selected.filter(c => c.id === config.challengeId || c.cve === config.challengeId);
+    if (selected.length === 0) throw new Error(`No challenge matches --challenge ${config.challengeId}`);
+  }
+  return selected;
+}
 
 async function main() {
   const config = parseConfig();
-  const runId = randomUUID();
+  const selectedChallenges = selectChallenges(config);
+  activeChallenges = selectedChallenges;
 
-  // Initialize dashboard state
-  dashState.runId = runId.slice(0, 8);
-  dashState.mode = config.mode;
-  dashState.startTime = Date.now();
+  console.log(`\n${'='.repeat(72)}`);
+  console.log('  GNU Security Audit CTF Benchmark');
+  console.log(`  Framing:        ${config.framing}`);
+  console.log(`  Agents/wave:    ${config.agentsPerWave}`);
+  if (config.maxDifficulty) console.log(`  Max difficulty: ${config.maxDifficulty}/5`);
+  if (config.challengeId) console.log(`  Challenge:      ${config.challengeId}`);
+  console.log(`  Challenges:     ${selectedChallenges.length}`);
+  console.log(`  Results:        ${config.resultsDir}`);
+  console.log(`  Run ID:         ${runId.slice(0, 8)}`);
+  console.log(`${'='.repeat(72)}\n`);
 
-  console.log(`\n${'='.repeat(60)}`);
-  console.log(`  GNU Security Audit CTF Benchmark`);
-  console.log(`  Mode:        ${config.mode}`);
-  console.log(`  Challenges:  ${CHALLENGES.length}`);
-  console.log(`  Repos:       ${Object.keys(REPOS).join(', ')}`);
-  console.log(`  Timeout:     ${config.timeoutMinutes}min per agent`);
-  console.log(`  Results:     ${config.resultsDir}`);
-  console.log(`  Run ID:      ${runId.slice(0, 8)}`);
-  console.log(`${'='.repeat(60)}\n`);
-
-  // Start SSE server for live dashboard
   startSSEServer(config.port);
 
-  // Clone all repos upfront
-  console.log('[orchestrator] Cloning repositories...');
-  for (const [name, url] of Object.entries(REPOS)) {
-    try {
-      cloneOrUpdateRepo(name, url, config.reposDir);
-    } catch (err) {
-      console.error(`[orchestrator] Failed to clone ${name}: ${err}`);
-    }
+  for (const framing of framingsToRun(config.framing)) {
+    const result = await runFraming(framing, config, selectedChallenges);
+    console.log(`\n[orchestrator] ${framing} complete: ${result.totalSolved} solved, ${result.totalScore} pts`);
   }
 
-  const startedAt = new Date().toISOString();
-  const allWaves: BenchmarkResult['waves'] = [];
-
-  if (config.mode === 'cold' || config.mode === 'full') {
-    const coldResults = await runWave({
-      waveNum: 1,
-      mode: 'cold',
-      challenges: CHALLENGES,
-      config,
-    });
-    allWaves.push({ waveNum: 1, mode: 'cold', results: coldResults });
-  }
-
-  if (config.mode === 'warm' || config.mode === 'full') {
-    const warmResults = await runWave({
-      waveNum: config.mode === 'full' ? 2 : 1,
-      mode: 'warm',
-      challenges: CHALLENGES,
-      config,
-    });
-    allWaves.push({
-      waveNum: config.mode === 'full' ? 2 : 1,
-      mode: 'warm',
-      results: warmResults,
-    });
-  }
-
-  // Summary
-  const totalScore = allWaves.reduce(
-    (s, w) => s + w.results.reduce((ws, r) => ws + r.totalScore, 0), 0,
-  );
-  const totalSolved = allWaves.reduce(
-    (s, w) => s + w.results.reduce((ws, r) => ws + r.challengesSolved, 0), 0,
-  );
-
-  console.log(`\n${'='.repeat(60)}`);
-  console.log(`  Final Results — Run ${runId.slice(0, 8)}`);
-  console.log(`${'='.repeat(60)}`);
-
-  for (const wave of allWaves) {
-    console.log(`\n  Wave ${wave.waveNum} (${wave.mode}):`);
-    for (const result of wave.results) {
-      console.log(
-        `    ${result.agent.name}: ` +
-        `${result.challengesSolved}/${result.challengesAttempted} solved, ` +
-        `${result.totalScore} pts, ` +
-        `${((result.endTime - result.startTime) / 1000).toFixed(1)}s`
-      );
-    }
-  }
-
-  console.log(`\n  Total: ${totalSolved} solved, ${totalScore} pts`);
-  console.log(`${'='.repeat(60)}\n`);
-
-  // Save results
-  const benchmarkResult: BenchmarkResult = {
-    runId,
-    config,
-    waves: allWaves,
-    startedAt,
-    completedAt: new Date().toISOString(),
-    totalScore,
-    totalSolved,
-  };
-  saveResult(benchmarkResult);
-
-  // Keep SSE server alive for dashboard
-  console.log(`[orchestrator] Dashboard available at http://localhost:${config.port}`);
-  console.log('[orchestrator] Press Ctrl+C to exit.');
+  console.log('[orchestrator] Benchmark run complete. Dashboard server remains available.');
 }
 
-main().catch((err) => {
-  console.error('[orchestrator] Benchmark failed:', err);
-  process.exit(1);
-});
+const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  main().catch((err) => {
+    console.error('[orchestrator] Benchmark failed:', err);
+    process.exit(1);
+  });
+}
+
+export {
+  EQUALIZATION_WAVES,
+  FUNNEL_WAVES,
+  buildDashboardState,
+};

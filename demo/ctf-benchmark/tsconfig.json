@@ -13,6 +13,6 @@
     "resolveJsonModule": true,
     "lib": ["ES2022"]
   },
-  "include": ["agents/**/*.ts", "benchmark/**/*.ts", "challenges/**/*.ts", "scoring/**/*.ts", "dashboard/**/*.ts"],
+  "include": ["agents/**/*.ts", "benchmark/**/*.ts", "challenges/**/*.ts", "scoring/**/*.ts", "dashboard/**/*.ts", "shared/**/*.ts"],
   "exclude": ["node_modules", "dist", "repos"]
 }

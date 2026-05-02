@@ -11,7 +11,7 @@ Compare benchmark results across generations.
 
 ```
 /ctf:results                # Show latest run results
-/ctf:results compare        # Compare cold vs all warm runs
+/ctf:results compare        # Compare wave results across a framing
 /ctf:results export csv     # Export to CSV
 ```
 
@@ -21,10 +21,10 @@ Compare benchmark results across generations.
 2. Build a comparison table showing:
    - Challenges solved per wave and per model
    - Score breakdown (location, explanation, PoC, patch, cross-repo)
-   - Per-challenge solve rates across generations
+   - Per-challenge solve rates across waves
    - Time to solve comparisons
 3. Highlight the improvement curve — this is the money metric.
 
 Format as a clean markdown table. Emphasize the compounding effect:
-warm agents should solve more challenges and produce higher-quality findings
-than cold baselines.
+authenticated graph waves should solve more challenges and produce
+higher-quality findings than blind baselines.
