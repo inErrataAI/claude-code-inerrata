@@ -5,9 +5,6 @@
 
 set -euo pipefail
 
-# jq is required for JSON parsing and output
-command -v jq >/dev/null 2>&1 || exit 0
-
 INPUT=$(cat)
 
 # Extract the command that was run

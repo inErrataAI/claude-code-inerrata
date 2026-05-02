@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 const PLUGIN_ROOT = join(__dirname, '..');
@@ -8,13 +8,17 @@ const MANIFEST_PATH = join(PLUGIN_ROOT, '.claude-plugin', 'plugin.json');
 const VALID_MCP_SERVERS = ['inerrata', 'inerrata-channel'];
 const MCP_TOOL_PREFIX_RE = /^mcp__plugin_inerrata_(inerrata|inerrata-channel)__[a-z][a-z_]*$/;
 
-// Available inerrata MCP tools (from plugin spec)
+// Current inErrata MCP tools used by the plugin docs/tests.
 const INERRATA_TOOLS = new Set([
-  'burst', 'explore', 'trace', 'expand', 'similar', 'why', 'contrast', 'flow',
-  'graph_initialize', 'get_node', 'browse', 'contribute', 'post_question',
-  'post_answer', 'get_question', 'vote', 'inbox', 'message_requests',
-  'send_message', 'mark_read', 'message_request', 'validate_solution',
-  'report_failure', 'report_agent', 'manage', 'get_ratio', 'manage_webhooks',
+  'answer', 'ask', 'browse', 'burst', 'chronicle_bridge_promote',
+  'chronicle_bridge_scan', 'chronicle_contribute', 'chronicle_crystallize',
+  'chronicle_learn_git', 'chronicle_lessons', 'chronicle_outcome',
+  'chronicle_precompact', 'chronicle_recall', 'chronicle_save', 'contribute',
+  'contrast', 'correct', 'expand', 'explore', 'flow', 'get_node', 'get_ratio',
+  'graph_initialize', 'guide', 'inbox', 'learn', 'manage', 'manage_webhooks',
+  'mark_read', 'message_request', 'message_requests', 'question',
+  'report_agent', 'report_failure', 'search', 'send_message', 'similar',
+  'trace', 'validate_solution', 'vote', 'why',
 ]);
 
 // Available channel MCP tools
@@ -80,6 +84,29 @@ function parseFrontmatter(content: string): Record<string, any> {
   return result;
 }
 
+function listMarkdownFiles(dirName: string): string[] {
+  const dir = join(PLUGIN_ROOT, dirName);
+  if (!existsSync(dir)) return [];
+
+  return readdirSync(dir)
+    .filter(entry => entry.endsWith('.md'))
+    .map(entry => join(dirName, entry));
+}
+
+function assertKnownMcpTool(tool: string): void {
+  expect(tool).toMatch(MCP_TOOL_PREFIX_RE);
+
+  const match = tool.match(
+    /^mcp__plugin_inerrata_(inerrata|inerrata-channel)__(.+)$/
+  );
+  expect(match).not.toBeNull();
+  if (!match) return;
+
+  const [, server, toolName] = match;
+  const validTools = server === 'inerrata' ? INERRATA_TOOLS : CHANNEL_TOOLS;
+  expect(validTools.has(toolName)).toBe(true);
+}
+
 describe('plugin.json manifest', () => {
   it('exists', () => {
     expect(existsSync(MANIFEST_PATH)).toBe(true);
@@ -102,122 +129,34 @@ describe('plugin.json manifest', () => {
     expect(manifest.name).toMatch(/^[a-z][a-z0-9-]{2,49}$/);
   });
 
-  describe('agents array', () => {
-    it('exists and is non-empty', () => {
-      expect(manifest).toHaveProperty('agents');
-      expect(Array.isArray(manifest.agents)).toBe(true);
-      expect(manifest.agents.length).toBeGreaterThan(0);
-    });
-
-    for (const agentPath of (manifest.agents || [])) {
-      it(`references existing file: ${agentPath}`, () => {
-        const fullPath = join(PLUGIN_ROOT, agentPath);
-        expect(existsSync(fullPath)).toBe(true);
-      });
-
-      it(`${agentPath} has valid agent frontmatter`, () => {
-        const content = readFileSync(join(PLUGIN_ROOT, agentPath), 'utf-8');
-        const fm = parseFrontmatter(content);
-        expect(fm).toHaveProperty('name');
-        expect(fm).toHaveProperty('description');
-        expect(fm).toHaveProperty('model');
-        expect(fm).toHaveProperty('color');
-      });
-
-      it(`${agentPath} agent name is lowercase-hyphen (3-50 chars)`, () => {
-        const content = readFileSync(join(PLUGIN_ROOT, agentPath), 'utf-8');
-        const fm = parseFrontmatter(content);
-        expect(fm.name).toMatch(/^[a-z][a-z0-9-]{2,49}$/);
-        expect(fm.name.length).toBeGreaterThanOrEqual(3);
-        expect(fm.name.length).toBeLessThanOrEqual(50);
-      });
-    }
-  });
-
-  describe('commands array', () => {
-    it('exists and is non-empty', () => {
-      expect(manifest).toHaveProperty('commands');
-      expect(Array.isArray(manifest.commands)).toBe(true);
-      expect(manifest.commands.length).toBeGreaterThan(0);
-    });
-
-    for (const cmdPath of (manifest.commands || [])) {
-      it(`references existing file: ${cmdPath}`, () => {
-        const fullPath = join(PLUGIN_ROOT, cmdPath);
-        expect(existsSync(fullPath)).toBe(true);
-      });
-
-      it(`${cmdPath} has valid command frontmatter`, () => {
-        const content = readFileSync(join(PLUGIN_ROOT, cmdPath), 'utf-8');
-        const fm = parseFrontmatter(content);
-        expect(fm).toHaveProperty('description');
-        expect(typeof fm.description).toBe('string');
-        expect(fm.description.length).toBeGreaterThan(0);
-      });
-    }
+  it('omits legacy agents and commands fields for current Claude Code installs', () => {
+    expect(manifest).not.toHaveProperty('agents');
+    expect(manifest).not.toHaveProperty('commands');
   });
 });
 
 describe('MCP tool name validation', () => {
-  const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf-8'));
+  it('optional legacy agent and command docs reference known MCP tools', () => {
+    const files = [
+      ...listMarkdownFiles('agents'),
+      ...listMarkdownFiles('commands'),
+    ];
+    let checkedTools = 0;
 
-  // Skip strict tool-name validation for agents marked as pre-existing/frozen
-  const FROZEN_AGENTS = new Set(['agents/inerrata-debugger.md']);
-
-  for (const agentPath of (manifest.agents || [])) {
-    describe(`agent: ${agentPath}`, () => {
-      const content = readFileSync(join(PLUGIN_ROOT, agentPath), 'utf-8');
+    for (const file of files) {
+      const content = readFileSync(join(PLUGIN_ROOT, file), 'utf-8');
       const fm = parseFrontmatter(content);
-      const tools: string[] = Array.isArray(fm.tools) ? fm.tools : [];
-      const mcpTools = tools.filter(t => t.startsWith('mcp__'));
+      const tools: string[] = [
+        ...(Array.isArray(fm.tools) ? fm.tools : []),
+        ...(Array.isArray(fm['allowed-tools']) ? fm['allowed-tools'] : []),
+      ];
 
-      for (const tool of mcpTools) {
-        it(`${tool} uses correct prefix format`, () => {
-          expect(tool).toMatch(MCP_TOOL_PREFIX_RE);
-        });
-
-        if (!FROZEN_AGENTS.has(agentPath)) {
-          it(`${tool} references a known MCP tool`, () => {
-            const match = tool.match(
-              /^mcp__plugin_inerrata_(inerrata|inerrata-channel)__(.+)$/
-            );
-            expect(match).not.toBeNull();
-            if (match) {
-              const [, server, toolName] = match;
-              const validTools = server === 'inerrata' ? INERRATA_TOOLS : CHANNEL_TOOLS;
-              expect(validTools.has(toolName)).toBe(true);
-            }
-          });
-        }
+      for (const tool of tools.filter(tool => tool.startsWith('mcp__'))) {
+        checkedTools += 1;
+        assertKnownMcpTool(tool);
       }
-    });
-  }
+    }
 
-  for (const cmdPath of (manifest.commands || [])) {
-    describe(`command: ${cmdPath}`, () => {
-      const content = readFileSync(join(PLUGIN_ROOT, cmdPath), 'utf-8');
-      const fm = parseFrontmatter(content);
-      const tools: string[] = Array.isArray(fm['allowed-tools'])
-        ? fm['allowed-tools']
-        : [];
-
-      for (const tool of tools) {
-        it(`${tool} uses correct prefix format`, () => {
-          expect(tool).toMatch(MCP_TOOL_PREFIX_RE);
-        });
-
-        it(`${tool} references a known MCP tool`, () => {
-          const match = tool.match(
-            /^mcp__plugin_inerrata_(inerrata|inerrata-channel)__(.+)$/
-          );
-          expect(match).not.toBeNull();
-          if (match) {
-            const [, server, toolName] = match;
-            const validTools = server === 'inerrata' ? INERRATA_TOOLS : CHANNEL_TOOLS;
-            expect(validTools.has(toolName)).toBe(true);
-          }
-        });
-      }
-    });
-  }
+    expect(checkedTools).toBeGreaterThan(0);
+  });
 });

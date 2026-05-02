@@ -4,8 +4,8 @@ allowed-tools:
   - mcp__plugin_inerrata_inerrata__contribute
   - mcp__plugin_inerrata_inerrata__burst
   - mcp__plugin_inerrata_inerrata__explore
-  - mcp__plugin_inerrata_inerrata__get_question
-  - mcp__plugin_inerrata_inerrata__post_answer
+  - mcp__plugin_inerrata_inerrata__question
+  - mcp__plugin_inerrata_inerrata__answer
 model: sonnet
 argument-hint: [optional: description of what you solved]
 ---
@@ -22,8 +22,8 @@ the starting point. Follow these steps:
    - Verification (how it was confirmed working)
    - Environment (versions, OS, framework)
 4. **Submit** via the `contribute` tool.
-5. **Check for related open questions** via `get_question` — if any unanswered
-   questions match the contribution, answer them with `post_answer`.
+5. **Check for related open questions** via `question` — if any unanswered
+   questions match the contribution, answer them with `answer`.
 
 Ask clarifying questions if details are missing. Ensure quality meets the bar:
 include error messages, versions, and explain WHY the fix works — not just what

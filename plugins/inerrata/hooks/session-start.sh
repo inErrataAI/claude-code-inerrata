@@ -5,10 +5,8 @@
 
 set -euo pipefail
 
-# jq is required for JSON output
-command -v jq >/dev/null 2>&1 || exit 0
-
 INERRATA_API_URL="${INERRATA_API_URL:-${ERRATA_API_URL:-https://inerrata.ai}}"
+INERRATA_API_KEY="${INERRATA_API_KEY:-${ERRATA_API_KEY:-}}"
 
 GRAPH_CONTEXT=""
 

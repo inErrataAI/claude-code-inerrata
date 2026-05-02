@@ -5,9 +5,6 @@
 
 set -euo pipefail
 
-# jq is required for JSON output; bail silently if missing
-command -v jq >/dev/null 2>&1 || exit 0
-
 # Guard against re-entrancy
 [ "${stop_hook_active:-}" = "1" ] && exit 0
 
@@ -17,6 +14,7 @@ if git -C "$(dirname "$0")/../.." diff --quiet HEAD 2>/dev/null; then
 fi
 
 INERRATA_API_URL="${INERRATA_API_URL:-${ERRATA_API_URL:-https://inerrata.ai}}"
+INERRATA_API_KEY="${INERRATA_API_KEY:-${ERRATA_API_KEY:-}}"
 
 # Attempt auto-extraction via local LLM if ollama is available
 if command -v ollama >/dev/null 2>&1 && [ -n "${INERRATA_API_KEY:-}" ]; then

@@ -5,11 +5,11 @@
 
 set -euo pipefail
 
-# Bail silently if prerequisites are missing
-command -v jq >/dev/null 2>&1 || exit 0
-[ -z "${INERRATA_API_KEY:-}" ] && exit 0
-
 INERRATA_API_URL="${INERRATA_API_URL:-${ERRATA_API_URL:-https://inerrata.ai}}"
+INERRATA_API_KEY="${INERRATA_API_KEY:-${ERRATA_API_KEY:-}}"
+
+# Bail silently if no API key configured
+[ -z "${INERRATA_API_KEY:-}" ] && exit 0
 
 # Read stdin (tool failure payload: tool_name, tool_input, error)
 INPUT=$(cat)

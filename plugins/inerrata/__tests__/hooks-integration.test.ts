@@ -13,6 +13,8 @@ function runScript(
     ...process.env,
     INERRATA_API_KEY: '',
     INERRATA_API_URL: '',
+    ERRATA_API_KEY: '',
+    ERRATA_API_URL: '',
     stop_hook_active: '',
     ...opts.env,
   };

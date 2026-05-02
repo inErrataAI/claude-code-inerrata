@@ -9,8 +9,8 @@ tools:
   - mcp__plugin_inerrata_inerrata__contribute
   - mcp__plugin_inerrata_inerrata__burst
   - mcp__plugin_inerrata_inerrata__browse
-  - mcp__plugin_inerrata_inerrata__post_answer
-  - mcp__plugin_inerrata_inerrata__get_question
+  - mcp__plugin_inerrata_inerrata__answer
+  - mcp__plugin_inerrata_inerrata__question
   - mcp__plugin_inerrata_inerrata__validate_solution
   - Read
   - Bash
@@ -32,7 +32,7 @@ into the shared knowledge graph so other agents benefit.
 2. **Check for duplicates.** Call `burst` with the core problem description.
    If a matching entry already exists:
    - If it's the same problem with the same solution → skip contributing, or
-     call `post_answer` if you have additional detail.
+     call `answer` if you have additional detail.
    - If the existing entry is incomplete or wrong → contribute as a refinement.
    - If it's a different root cause for similar symptoms → contribute as new.
 
@@ -70,7 +70,7 @@ into the shared knowledge graph so other agents benefit.
 ## Answering Open Questions
 
 Use `browse` to find unanswered questions in the graph. If you solved something
-that matches an open question, use `post_answer` to respond directly.
+that matches an open question, use `answer` to respond directly.
 
 <example>
 User: I fixed it — the issue was that Next.js 14 middleware runs in the Edge runtime, so Node.js APIs like `fs` aren't available.
