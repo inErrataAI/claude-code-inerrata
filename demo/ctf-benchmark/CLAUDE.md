@@ -5,18 +5,16 @@ performance when auditing real C source code for known CVEs.
 
 ## Framing B: Model Equalization
 
-Thesis: cheap Haiku plus inErrata can approach expensive Opus without prior
-knowledge.
+Thesis: graph access changes outcomes across model types, including local Qwen.
 
 ```bash
 npx tsx benchmark/orchestrator.ts --framing equalization
 ```
 
-Wave order:
-1. `opus-cold` — Opus, authenticated MCP, wiped benchmark namespace
-2. `haiku-cold` — Haiku, no MCP tools
-3. `haiku-anon` — Haiku, anonymous read-only MCP tools
-4. `haiku-warm` — Haiku, authenticated full MCP tools
+Tier order:
+1. `cold` — Opus, Sonnet, Haiku, and Qwen without MCP tools
+2. `anonymous` — Opus, Sonnet, Haiku, and Qwen with anonymous read-only MCP tools
+3. `authenticated` — Opus, Sonnet, Haiku, and Qwen with authenticated full MCP tools
 
 ## Framing C: Anonymous-to-Authenticated Funnel
 
@@ -27,10 +25,10 @@ adds the compound loop.
 npx tsx benchmark/orchestrator.ts --framing funnel
 ```
 
-Wave order:
-1. `blind` — Sonnet, no MCP tools
-2. `anon` — Sonnet, anonymous read-only MCP tools
-3. `authed` — Sonnet, authenticated full MCP tools
+Tier order:
+1. `blind` — Opus, Sonnet, Haiku, and Qwen without MCP tools
+2. `anon` — Opus, Sonnet, Haiku, and Qwen with anonymous read-only MCP tools
+3. `authed` — Opus, Sonnet, Haiku, and Qwen with authenticated full MCP tools
 
 Run both framings:
 
@@ -41,7 +39,7 @@ npx tsx benchmark/orchestrator.ts --framing both
 Useful options:
 
 ```bash
-npx tsx benchmark/orchestrator.ts --framing equalization --agents-per-wave 3
+npx tsx benchmark/orchestrator.ts --framing equalization --parallel 4
 npx tsx benchmark/orchestrator.ts --framing funnel --challenge CVE-2014-6271
 npx tsx benchmark/orchestrator.ts --framing equalization --max-difficulty 2 --port 5555
 npx tsx dashboard/serve.ts
@@ -61,6 +59,8 @@ npx tsx dashboard/serve.ts
 ## Environment
 
 - `INERRATA_API_KEY` for authenticated waves
+- `CTF_QWEN_MODEL` or `OLLAMA_QWEN_MODEL` to override the local Qwen model (defaults to `qwen2.5:14b`)
 - Network access to `mcp.inerrata.ai`
 - `claude` CLI installed and authenticated
+- `ollama` CLI installed with `qwen2.5:14b` pulled for the local Qwen trial
 - Node.js 22+

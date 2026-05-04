@@ -220,12 +220,17 @@ body.shake { animation: screenShake 0.15s ease-out; }
    MAIN LAYOUT (vertical stack)
    ========================================================================= */
 #main-content { padding: 8px 12px 12px; }
+#upper-dashboard, #activity-section, #ticker-section {
+  width:min(1120px, 100%);
+  margin-left:auto;
+  margin-right:auto;
+}
 
-.section { margin-bottom: 10px; }
+.section { margin-bottom: 8px; }
 .section-header {
-  font-size:7px; color:var(--pink); letter-spacing:2px; text-transform:uppercase;
-  padding:4px 8px; background:rgba(10,10,15,0.85); border-bottom:1px solid var(--dim);
-  margin-bottom:6px; display:flex; align-items:center; gap:8px;
+  font-size:6px; color:var(--pink); letter-spacing:2px; text-transform:uppercase;
+  padding:4px 7px; background:rgba(10,10,15,0.85); border-bottom:1px solid var(--dim);
+  margin-bottom:5px; display:flex; align-items:center; gap:8px;
 }
 .section-header .toggle-btn {
   cursor:pointer; color:var(--muted); font-size:9px; user-select:none;
@@ -238,15 +243,15 @@ body.shake { animation: screenShake 0.15s ease-out; }
    ========================================================================= */
 #convergence-section { }
 #convergence-canvas {
-  width:100%; height:55vh; min-height:350px; max-height:600px;
+  width:100%; height:36vh; min-height:240px; max-height:380px;
   display:block; background:var(--bg2); border:1px solid var(--dim); border-radius:2px;
 }
 #convergence-overlay {
-  position:relative; margin-top:-40px; text-align:center; pointer-events:none; z-index:2;
-  height:40px;
+  position:relative; margin-top:-32px; text-align:center; pointer-events:none; z-index:2;
+  height:32px;
 }
 #compound-flash {
-  font-size:11px; color:var(--neon); letter-spacing:2px;
+  font-size:9px; color:var(--neon); letter-spacing:2px;
   text-shadow:0 0 12px var(--neon), 0 0 24px rgba(0,255,136,0.4);
   opacity:0; transition: opacity 0.5s;
 }
@@ -256,24 +261,24 @@ body.shake { animation: screenShake 0.15s ease-out; }
   50% { opacity:0.5; }
 }
 #comparison-panel {
-  margin-top:6px; display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:6px;
+  margin-top:5px; display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:5px;
 }
 .wave-card {
-  border:1px solid var(--dim); background:rgba(14,14,24,0.92); padding:8px; min-height:58px;
+  border:1px solid var(--dim); background:rgba(14,14,24,0.92); padding:6px; min-height:48px;
 }
-.wave-card .wave-title { font-size:7px; color:var(--cyan); margin-bottom:6px; }
-.wave-card .wave-meta { font-size:6px; color:var(--muted); line-height:1.8; }
-.wave-card .wave-score { font-size:12px; color:var(--gold); margin-top:4px; }
+.wave-card .wave-title { font-size:6px; color:var(--cyan); margin-bottom:5px; }
+.wave-card .wave-meta { font-size:5px; color:var(--muted); line-height:1.7; }
+.wave-card .wave-score { font-size:10px; color:var(--gold); margin-top:3px; }
 .auth-badge { color:var(--neon); }
 .roi-card { border-color:var(--gold); }
 
 /* =========================================================================
    AGENT CARDS
    ========================================================================= */
-#agents-row { display:flex; gap:8px; flex-wrap:wrap; }
+#agents-row { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
 .agent-card {
-  flex:1; min-width:240px; background:var(--bg2); border:1px solid var(--dim);
-  border-radius:2px; padding:12px; transition: all 0.3s; position:relative; overflow:hidden;
+  flex:1 1 210px; max-width:270px; min-width:205px; background:var(--bg2); border:1px solid var(--dim);
+  border-radius:2px; padding:8px; transition: all 0.3s; position:relative; overflow:hidden;
 }
 .agent-card.running { border-color: rgba(0,255,136,0.25); }
 .agent-card.throttled { border-color: var(--gold); opacity:0.7; }
@@ -286,63 +291,93 @@ body.shake { animation: screenShake 0.15s ease-out; }
 }
 .agent-card.flash { animation: flagCapture 1.2s ease-out; }
 
-.agent-top { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.agent-top { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
 .agent-sprite { flex-shrink:0; image-rendering:pixelated; }
-.agent-name { font-size:10px; font-weight:bold; }
-.agent-model { font-size:7px; color:var(--muted); }
-.agent-status-dot { width:8px; height:8px; border-radius:50%; margin-left:auto; flex-shrink:0; }
+.agent-name { font-size:8px; font-weight:bold; }
+.agent-model { font-size:6px; color:var(--muted); line-height:1.6; }
+.agent-status-dot { width:7px; height:7px; border-radius:50%; margin-left:auto; flex-shrink:0; }
 .dot-running { background:var(--neon); box-shadow:0 0 6px var(--neon); }
 .dot-throttled { background:var(--gold); box-shadow:0 0 6px var(--gold); }
 .dot-finished { background:#555; }
 .dot-idle { background:#333; }
 .dot-failed { background:var(--pink); box-shadow:0 0 6px var(--pink); }
 
-.agent-scores { display:flex; gap:12px; margin-top:6px; flex-wrap:wrap; }
+.agent-scores { display:flex; gap:9px; margin-top:5px; flex-wrap:wrap; }
 .agent-score-block { }
-.agent-score-label { font-size:6px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
-.agent-score-val { font-size:14px; font-weight:bold; }
+.agent-score-label { font-size:5px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
+.agent-score-val { font-size:11px; font-weight:bold; }
 .agent-score-val.pts { color:var(--pink); }
 .agent-score-val.flags { color:var(--gold); }
 .agent-score-val.improve { color:var(--neon); }
 .agent-score-val.graph { color:var(--purple); }
 
-.agent-current { font-size:7px; color:var(--cyan); margin-top:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.agent-wave-scores { font-size:7px; color:var(--muted); margin-top:4px; }
-.flag-icons { color:var(--gold); font-size:8px; margin-top:4px; }
+.agent-current { font-size:6px; color:var(--cyan); margin-top:5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.agent-wave-scores { font-size:6px; color:var(--muted); margin-top:4px; }
+.flag-icons { color:var(--gold); font-size:7px; margin-top:4px; }
 
 /* =========================================================================
    CHALLENGE GRID
    ========================================================================= */
 #challenge-grid {
-  display:flex; gap:6px; overflow-x:auto; padding-bottom:6px;
+  display:flex; gap:5px; overflow-x:auto; padding-bottom:5px;
 }
 #challenge-grid::-webkit-scrollbar { height:4px; }
 #challenge-grid::-webkit-scrollbar-thumb { background:var(--dim); border-radius:2px; }
 
 .challenge-card {
-  min-width:120px; max-width:140px; background:var(--bg2); border:1px solid var(--dim);
-  border-radius:2px; padding:8px; flex-shrink:0;
+  min-width:96px; max-width:110px; background:var(--bg2); border:1px solid var(--dim);
+  border-radius:2px; padding:6px; flex-shrink:0;
 }
-.challenge-cve { font-size:7px; color:var(--cyan); font-weight:bold; letter-spacing:0.5px; }
-.challenge-repo { font-size:6px; color:var(--muted); margin-top:2px; }
-.challenge-stars { font-size:8px; color:var(--gold); margin-top:3px; letter-spacing:1px; }
-.challenge-bars { margin-top:6px; }
+.challenge-cve { font-size:6px; color:var(--cyan); font-weight:bold; letter-spacing:0.5px; }
+.challenge-repo { font-size:5px; color:var(--muted); margin-top:2px; }
+.challenge-stars { font-size:7px; color:var(--gold); margin-top:3px; letter-spacing:1px; }
+.challenge-bars { margin-top:5px; }
 .challenge-bar {
-  display:flex; align-items:center; gap:4px; margin-bottom:3px; font-size:6px;
+  display:flex; align-items:center; gap:3px; margin-bottom:3px; font-size:5px;
 }
-.challenge-bar-label { width:10px; font-weight:bold; }
-.challenge-bar-track { flex:1; height:6px; background:#0a0a14; border:1px solid #1a1a2e; border-radius:1px; overflow:hidden; }
+.challenge-bar-label { width:9px; font-weight:bold; }
+.challenge-bar-track { flex:1; height:5px; background:#0a0a14; border:1px solid #1a1a2e; border-radius:1px; overflow:hidden; }
 .challenge-bar-fill { height:100%; transition:width 0.5s; border-radius:1px; }
-.challenge-bar-pts { width:28px; text-align:right; color:var(--muted); }
+.challenge-bar-pts { width:22px; text-align:right; color:var(--muted); }
 
 /* =========================================================================
-   KNOWLEDGE GRAPH (collapsible)
+   LIVE RUN LOG
    ========================================================================= */
-#graph-section .section-body { overflow:hidden; transition: max-height 0.4s ease; max-height:0; }
-#graph-section .section-body.open { max-height:260px; }
-#graph-canvas {
-  width:100%; height:200px; display:block; background:var(--bg2);
-  border:1px solid var(--dim); border-radius:2px;
+#activity-log {
+  height:240px; min-height:240px; overflow-y:auto; background:var(--bg2);
+  border:1px solid var(--dim); border-radius:2px; padding:8px;
+}
+#activity-log::-webkit-scrollbar { width:6px; }
+#activity-log::-webkit-scrollbar-thumb { background:var(--dim); border-radius:2px; }
+.log-empty {
+  color:var(--muted); font-size:7px; height:100%; display:flex; align-items:center; justify-content:center;
+}
+.log-row {
+  display:grid; grid-template-columns:58px 74px minmax(0,1fr);
+  gap:8px; align-items:start; padding:6px 0; border-bottom:1px solid rgba(26,26,62,0.7);
+}
+.log-row:last-child { border-bottom:0; }
+.log-time { color:var(--muted); font-size:6px; line-height:1.6; }
+.log-type {
+  font-size:5px; letter-spacing:1px; text-transform:uppercase; padding:3px 4px;
+  border:1px solid currentColor; border-radius:2px; text-align:center;
+}
+.log-message { font-size:7px; line-height:1.7; overflow-wrap:anywhere; }
+.log-agent { font-weight:bold; }
+.log-type-system { color:var(--muted); }
+.log-type-wave { color:var(--cyan); }
+.log-type-agent { color:var(--blue); }
+.log-type-tool { color:var(--purple); }
+.log-type-graph { color:var(--purple); }
+.log-type-flag { color:var(--gold); }
+.log-type-score { color:var(--neon); }
+.log-type-error { color:var(--pink); }
+#log-count { margin-left:auto; color:var(--muted); font-size:5px; letter-spacing:1px; }
+@media (max-width: 760px) {
+  #convergence-canvas { height:300px; }
+  .agent-card { max-width:none; }
+  .log-row { grid-template-columns:48px 62px minmax(0,1fr); gap:6px; }
+  .log-message { font-size:6px; }
 }
 
 /* =========================================================================
@@ -403,42 +438,42 @@ body.shake { animation: screenShake 0.15s ease-out; }
 
 <!-- Main content -->
 <div id="main-content">
+  <div id="upper-dashboard">
 
-  <!-- CONVERGENCE CHART -->
-  <div class="section" id="convergence-section">
-    <div class="section-header">CONVERGENCE CHART</div>
-    <canvas id="convergence-canvas"></canvas>
-    <div id="convergence-overlay"><div id="compound-flash">KNOWLEDGE COMPOUNDING</div></div>
-    <div id="comparison-panel"></div>
+    <!-- CONVERGENCE CHART -->
+    <div class="section" id="convergence-section">
+      <div class="section-header">CONVERGENCE CHART</div>
+      <canvas id="convergence-canvas"></canvas>
+      <div id="convergence-overlay"><div id="compound-flash">KNOWLEDGE COMPOUNDING</div></div>
+      <div id="comparison-panel"></div>
+    </div>
+
+    <!-- AGENT CARDS -->
+    <div class="section" id="agents-section">
+      <div class="section-header">AGENT PANEL</div>
+      <div id="agents-row"></div>
+    </div>
+
+    <!-- CHALLENGE GRID -->
+    <div class="section" id="challenges-section">
+      <div class="section-header">CHALLENGE GRID</div>
+      <div id="challenge-grid"></div>
+    </div>
   </div>
 
-  <!-- AGENT CARDS -->
-  <div class="section" id="agents-section">
-    <div class="section-header">AGENT PANEL</div>
-    <div id="agents-row"></div>
-  </div>
-
-  <!-- CHALLENGE GRID -->
-  <div class="section" id="challenges-section">
-    <div class="section-header">CHALLENGE GRID</div>
-    <div id="challenge-grid"></div>
-  </div>
-
-  <!-- KNOWLEDGE GRAPH (collapsible) -->
-  <div class="section" id="graph-section">
+  <!-- LIVE RUN LOG -->
+  <div class="section" id="activity-section">
     <div class="section-header">
-      <span class="toggle-btn" id="graph-toggle">&#9654;</span>
-      KNOWLEDGE GRAPH
+      LIVE RUN LOG
+      <span id="log-count">0 EVENTS</span>
     </div>
-    <div class="section-body" id="graph-body">
-      <canvas id="graph-canvas"></canvas>
-    </div>
+    <div id="activity-log"><div class="log-empty">WAITING FOR RUN EVENTS</div></div>
   </div>
 
   <!-- EVENT TICKER -->
   <div class="section" id="ticker-section">
     <div id="ticker-zone">
-      <div id="ticker-label">EVENT LOG</div>
+      <div id="ticker-label">FLAG TAPE</div>
       <div id="ticker-track"></div>
     </div>
   </div>
@@ -467,7 +502,7 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
 function authLabel(auth) {
   if (auth === 'authenticated') return 'KEY AUTH';
   if (auth === 'anonymous') return 'ANON READ';
-  return 'NO TOOLS';
+  return 'NO GRAPH';
 }
 function waveDisplay(wave) {
   if (!wave) return '-';
@@ -479,176 +514,181 @@ var AGENT_COLORS = {
   'opus-wizard':  '#9b59b6',  'opus':  '#9b59b6',
   'sonnet-bard':  '#3498db',  'sonnet':  '#3498db',
   'haiku-rogue':  '#2ecc71',  'haiku':  '#2ecc71',
+  'qwen2.5-14b': '#f1c40f',
 };
 var AGENT_LABELS = {
   'opus-wizard':  'OPUS',   'opus':  'OPUS',
   'sonnet-bard':  'SONNET', 'sonnet':  'SONNET',
   'haiku-rogue':  'HAIKU',  'haiku':  'HAIKU',
+  'qwen2.5-14b': 'QWEN2.5 14B',
 };
 function agentColor(id) {
   if (AGENT_COLORS[id]) return AGENT_COLORS[id];
-  if (id.startsWith('opus')) return '#9b59b6';
-  if (id.startsWith('sonnet')) return '#3498db';
-  if (id.startsWith('haiku')) return '#2ecc71';
+  if (id.indexOf('opus') >= 0) return '#9b59b6';
+  if (id.indexOf('sonnet') >= 0) return '#3498db';
+  if (id.indexOf('haiku') >= 0) return '#2ecc71';
+  if (id.indexOf('qwen') >= 0) return '#f1c40f';
   return '#888';
 }
 function agentLabel(id) {
   if (AGENT_LABELS[id]) return AGENT_LABELS[id];
-  if (id.startsWith('opus')) return 'OPUS';
-  if (id.startsWith('sonnet')) return 'SONNET';
-  if (id.startsWith('haiku')) return 'HAIKU';
+  if (id.indexOf('opus') >= 0) return 'OPUS';
+  if (id.indexOf('sonnet') >= 0) return 'SONNET';
+  if (id.indexOf('haiku') >= 0) return 'HAIKU';
+  if (id.indexOf('qwen2.5-14b') >= 0) return 'QWEN2.5 14B';
+  if (id.indexOf('qwen') >= 0) return 'QWEN';
   return id.slice(0, 10).toUpperCase();
 }
-
-// =========================================================================
-// Knowledge Graph (collapsible)
-// =========================================================================
-var graphOpen = false;
-document.getElementById('graph-toggle').addEventListener('click', function() {
-  graphOpen = !graphOpen;
-  this.classList.toggle('open', graphOpen);
-  document.getElementById('graph-body').classList.toggle('open', graphOpen);
-});
-
-var graphCanvas = document.getElementById('graph-canvas');
-var graphCtx = graphCanvas.getContext('2d');
-var gNodes = [], gEdges = [];
-var noisePattern = null;
-
-var TYPE_COLORS = {
-  Solution: '#00ff88', RootCause: '#ff8800', Domain: '#4488ff',
-  Vulnerability: '#ff4444', Pattern: '#aa44ff', Exploit: '#ff2222',
-};
-
-function createNoisePattern() {
-  var c = document.createElement('canvas');
-  c.width = 128; c.height = 128;
-  var x = c.getContext('2d');
-  var img = x.createImageData(128, 128);
-  for (var i = 0; i < img.data.length; i += 4) {
-    var v = Math.random() * 12;
-    img.data[i] = v; img.data[i+1] = v; img.data[i+2] = v + 4; img.data[i+3] = 25;
-  }
-  x.putImageData(img, 0, 0);
-  noisePattern = graphCtx.createPattern(c, 'repeat');
+function modelColor(model) {
+  return agentColor(String(model || ''));
+}
+function modelLabel(model) {
+  return agentLabel(String(model || ''));
 }
 
-function resizeGraphCanvas() {
-  var p = document.getElementById('graph-body');
-  graphCanvas.width = p.clientWidth || 600;
-  graphCanvas.height = 200;
-  createNoisePattern();
-}
-resizeGraphCanvas();
-window.addEventListener('resize', resizeGraphCanvas);
+// =========================================================================
+// Live Run Log
+// =========================================================================
+var runLogEvents = [];
+var runLogSeen = {};
+var lastAgentSnapshots = {};
+var lastToolLogAt = {};
 
-function initGraph(nodes, edges) {
-  var cx = graphCanvas.width / 2, cy = graphCanvas.height / 2;
-  gNodes = nodes.map(function(n) {
-    return {
-      id: n.id, type: n.type, label: n.label,
-      x: cx + (Math.random() - 0.5) * 200,
-      y: cy + (Math.random() - 0.5) * 100,
-      vx: 0, vy: 0, r: 3 + Math.random() * 2,
-    };
+function clockTime(ts) {
+  var d = new Date(ts || Date.now());
+  return d.toLocaleTimeString([], { hour12:false, hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+
+function normalizeToolName(tool) {
+  return String(tool || 'tool')
+    .replace(/^mcp__inerrata__/, '')
+    .replace(/^functions__/, '')
+    .replace(/^multi_tool_use__/, '');
+}
+
+function shouldThrottleLog(key, ms) {
+  var now = Date.now();
+  if (lastToolLogAt[key] && now - lastToolLogAt[key] < ms) return true;
+  lastToolLogAt[key] = now;
+  return false;
+}
+
+function addRunLogEvent(type, text, agentId, key, ts) {
+  var dedupeKey = key || (type + ':' + text);
+  if (runLogSeen[dedupeKey]) return;
+  runLogSeen[dedupeKey] = true;
+  runLogEvents.push({
+    type: type || 'system',
+    text: text || '',
+    agentId: agentId || '',
+    ts: ts || Date.now(),
   });
-  var map = {};
-  gNodes.forEach(function(n) { map[n.id] = n; });
-  gEdges = edges.filter(function(e) { return map[e.source] && map[e.target]; })
-    .map(function(e) { return { source: map[e.source], target: map[e.target], type: e.type }; });
+  if (runLogEvents.length > 180) runLogEvents.shift();
+  renderRunLog();
 }
 
-function graphSimStep() {
-  var cx = graphCanvas.width / 2, cy = graphCanvas.height / 2;
-  var N = gNodes.length;
-  var repel = Math.min(400, 10000 / (N + 1));
-  for (var i = 0; i < N; i++) {
-    for (var j = i + 1; j < N; j++) {
-      var a = gNodes[i], b = gNodes[j];
-      var dx = a.x - b.x, dy = a.y - b.y;
-      var d = Math.sqrt(dx*dx + dy*dy) || 1;
-      var f = Math.min(repel / (d*d), 3);
-      a.vx += dx/d*f; a.vy += dy/d*f;
-      b.vx -= dx/d*f; b.vy -= dy/d*f;
+function renderRunLog() {
+  var el = document.getElementById('activity-log');
+  if (!el) return;
+  var count = document.getElementById('log-count');
+  if (count) count.textContent = runLogEvents.length + ' EVENTS';
+  if (runLogEvents.length === 0) {
+    el.innerHTML = '<div class="log-empty">WAITING FOR RUN EVENTS</div>';
+    return;
+  }
+  var shouldStick = el.scrollTop + el.clientHeight >= el.scrollHeight - 18;
+  el.innerHTML = runLogEvents.map(function(e) {
+    var color = e.agentId ? agentColor(e.agentId) : '';
+    var agent = e.agentId
+      ? '<span class="log-agent" style="color:' + color + '">' + esc(agentLabel(e.agentId)) + '</span> '
+      : '';
+    return '<div class="log-row">'
+      + '<div class="log-time">' + clockTime(e.ts) + '</div>'
+      + '<div class="log-type log-type-' + esc(e.type) + '">' + esc(e.type) + '</div>'
+      + '<div class="log-message">' + agent + esc(e.text) + '</div>'
+      + '</div>';
+  }).join('');
+  if (shouldStick) el.scrollTop = el.scrollHeight;
+}
+
+function syncRunLogFromState(state) {
+  var waves = state.waves || [];
+  for (var wi = 0; wi < waves.length; wi++) {
+    var wave = waves[wi];
+    if (wave.startTime) {
+      addRunLogEvent(
+        'wave',
+        'Wave ' + wave.number + ' started: ' + (wave.label || wave.mode || '').toUpperCase() + ' / ' + authLabel(wave.auth || wave.mode),
+        '',
+        'state-wave-start:' + wave.number + ':' + wave.label,
+        wave.startTime
+      );
     }
-  }
-  for (var ei = 0; ei < gEdges.length; ei++) {
-    var e = gEdges[ei];
-    var dx = e.target.x - e.source.x, dy = e.target.y - e.source.y;
-    var d = Math.sqrt(dx*dx + dy*dy) || 1;
-    var f = (d - 40) * 0.008;
-    e.source.vx += dx/d*f; e.source.vy += dy/d*f;
-    e.target.vx -= dx/d*f; e.target.vy -= dy/d*f;
-  }
-  for (var ni = 0; ni < N; ni++) {
-    var n = gNodes[ni];
-    n.vx += (cx - n.x) * 0.003; n.vy += (cy - n.y) * 0.003;
-    n.vx *= 0.88; n.vy *= 0.88;
-    n.x += n.vx; n.y += n.vy;
-  }
-}
-
-function drawGraph() {
-  var w = graphCanvas.width, h = graphCanvas.height;
-  graphCtx.fillStyle = '#0a0a0f';
-  graphCtx.fillRect(0, 0, w, h);
-  if (noisePattern) { graphCtx.fillStyle = noisePattern; graphCtx.fillRect(0, 0, w, h); }
-
-  // Edges
-  for (var ei = 0; ei < gEdges.length; ei++) {
-    var e = gEdges[ei];
-    graphCtx.beginPath();
-    graphCtx.moveTo(e.source.x, e.source.y);
-    graphCtx.lineTo(e.target.x, e.target.y);
-    graphCtx.strokeStyle = 'rgba(40,40,80,0.5)';
-    graphCtx.lineWidth = 1;
-    graphCtx.stroke();
-  }
-
-  // Nodes
-  for (var ni = 0; ni < gNodes.length; ni++) {
-    var n = gNodes[ni];
-    var color = TYPE_COLORS[n.type] || '#666';
-    // Glow
-    var grad = graphCtx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r * 3);
-    grad.addColorStop(0, color + '22');
-    grad.addColorStop(1, 'transparent');
-    graphCtx.beginPath(); graphCtx.arc(n.x, n.y, n.r * 3, 0, Math.PI * 2);
-    graphCtx.fillStyle = grad; graphCtx.fill();
-    // Core
-    graphCtx.beginPath(); graphCtx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
-    graphCtx.fillStyle = color; graphCtx.fill();
-    // Label
-    if (gNodes.length < 60) {
-      graphCtx.fillStyle = '#444';
-      graphCtx.font = '6px monospace';
-      graphCtx.fillText((n.label || '').slice(0, 16), n.x + n.r + 3, n.y + 2);
+    if (wave.endTime) {
+      addRunLogEvent(
+        'wave',
+        'Wave ' + wave.number + ' finished: ' + (wave.label || wave.mode || '').toUpperCase(),
+        '',
+        'state-wave-end:' + wave.number + ':' + wave.label,
+        wave.endTime
+      );
     }
   }
 
-  // Legend
-  graphCtx.font = '6px "Press Start 2P", monospace';
-  var ly = 14;
-  var seen = {};
-  gNodes.forEach(function(n) { seen[n.type] = true; });
-  for (var type in TYPE_COLORS) {
-    if (!seen[type]) continue;
-    graphCtx.fillStyle = TYPE_COLORS[type];
-    graphCtx.fillRect(6, ly - 3, 5, 5);
-    graphCtx.fillStyle = '#444';
-    graphCtx.fillText(type, 14, ly);
-    ly += 10;
+  var flags = state.flags || [];
+  for (var fi = Math.max(0, flags.length - 80); fi < flags.length; fi++) {
+    var f = flags[fi];
+    addRunLogEvent(
+      'flag',
+      'captured ' + (f.challengeId || 'unknown challenge') + ' for +' + (f.points || 0) + ' points in ' + (f.waveLabel || ('W' + f.wave)),
+      f.agentId,
+      'state-flag:' + f.agentId + ':' + f.challengeId + ':' + f.timestamp,
+      f.timestamp
+    );
   }
-}
 
-function animateGraph() {
-  if (graphOpen && gNodes.length > 0) {
-    for (var i = 0; i < 3; i++) graphSimStep();
-    drawGraph();
+  var agents = state.agents || {};
+  for (var agentId in agents) {
+    var a = agents[agentId];
+    var prev = lastAgentSnapshots[agentId];
+    var challenge = a.currentChallenge || '';
+    var repo = a.currentRepo ? ' (' + a.currentRepo + ')' : '';
+
+    if (!prev) {
+      addRunLogEvent(
+        'agent',
+        (a.status || 'idle').toUpperCase() + (challenge ? ' on ' + challenge + repo : ''),
+        agentId,
+        'state-agent-initial:' + agentId + ':' + (a.status || '') + ':' + challenge,
+        Date.now()
+      );
+    } else {
+      if (challenge && challenge !== prev.currentChallenge) {
+        addRunLogEvent('agent', 'started audit on ' + challenge + repo, agentId, 'state-agent-challenge:' + agentId + ':' + challenge + ':' + (a.wave || ''), Date.now());
+      }
+      if ((a.status || '') !== (prev.status || '')) {
+        addRunLogEvent('agent', 'status changed to ' + (a.status || 'idle').toUpperCase(), agentId, 'state-agent-status:' + agentId + ':' + (a.status || '') + ':' + Date.now(), Date.now());
+      }
+      if ((a.totalPoints || 0) > (prev.totalPoints || 0)) {
+        addRunLogEvent('score', 'score increased by ' + ((a.totalPoints || 0) - (prev.totalPoints || 0)) + ' points', agentId, 'state-agent-score:' + agentId + ':' + (a.totalPoints || 0), Date.now());
+      }
+      if ((a.graphHits || 0) > (prev.graphHits || 0)) {
+        addRunLogEvent('graph', 'made ' + ((a.graphHits || 0) - (prev.graphHits || 0)) + ' graph call(s)', agentId, 'state-agent-graph:' + agentId + ':' + (a.graphHits || 0), Date.now());
+      }
+      if ((a.toolCalls || 0) > (prev.toolCalls || 0)) {
+        addRunLogEvent('tool', 'reported ' + ((a.toolCalls || 0) - (prev.toolCalls || 0)) + ' new tool event(s)', agentId, 'state-agent-tool:' + agentId + ':' + (a.toolCalls || 0), Date.now());
+      }
+    }
+
+    lastAgentSnapshots[agentId] = {
+      status: a.status || '',
+      currentChallenge: challenge,
+      totalPoints: a.totalPoints || 0,
+      graphHits: a.graphHits || 0,
+      toolCalls: a.toolCalls || 0,
+    };
   }
-  requestAnimationFrame(animateGraph);
 }
-animateGraph();
 
 // =========================================================================
 // Convergence Chart (Canvas)
@@ -787,7 +827,9 @@ function drawConvergenceChart(state) {
 
     for (var ai = 0; ai < agentIds.length; ai++) {
       var agentId = agentIds[ai];
-      var color = agentColor(agentId);
+      var agent = agents[agentId] || {};
+      var model = agent.model || agentId;
+      var color = modelColor(model);
       var agentScores = (wave.scores && wave.scores[agentId]) || {};
       if (Object.keys(agentScores).length === 0) continue;
       var cumPts = [];
@@ -800,13 +842,13 @@ function drawConvergenceChart(state) {
       lineData.push({
         agentId: agentId,
         wave: wave.number,
+        model: model,
         mode: wave.mode,
-        label: wave.label || wave.mode,
         auth: wave.auth || wave.mode,
         color: color,
         dashed: isWarm,
         points: cumPts,
-        label: (wave.label || agentLabel(agentId)).toUpperCase() + ' [' + authLabel(wave.auth || wave.mode) + ']',
+        label: modelLabel(model),
       });
     }
   }
@@ -879,9 +921,9 @@ function drawConvergenceChart(state) {
     legendY += 12;
   }
 
-  // Check for convergence: Haiku authenticated approaching Opus cold.
-  var coldOpus = lineData.find(function(l) { return l.label.indexOf('OPUS-COLD') === 0; });
-  var warmHaiku = lineData.find(function(l) { return l.label.indexOf('HAIKU-WARM') === 0; });
+  // Check for convergence: authenticated Haiku approaching cold Opus.
+  var coldOpus = lineData.find(function(l) { return l.model === 'opus' && l.auth === 'none'; });
+  var warmHaiku = lineData.find(function(l) { return l.model === 'haiku' && l.auth === 'authenticated'; });
   var compoundEl = document.getElementById('compound-flash');
 
   if (coldOpus && warmHaiku) {
@@ -965,6 +1007,7 @@ if (window.SpritesEngine) {
 function getCharType(agentId) {
   if (agentId.includes('opus')) return 'opus';
   if (agentId.includes('sonnet')) return 'sonnet';
+  if (agentId.includes('qwen')) return 'haiku';
   return 'haiku';
 }
 
@@ -1014,7 +1057,7 @@ function renderAgents(state) {
     var charType = getCharType(id);
     var animState = agentSpriteState(a.status, a.flagsCaptured || 0);
     var spriteURL = getSpriteDataURL(charType, animState, _spriteAnimFrame);
-    var spriteSize = charType === 'opus' ? 48 : charType === 'sonnet' ? 44 : 40;
+    var spriteSize = charType === 'opus' ? 40 : charType === 'sonnet' ? 36 : 34;
     var color = agentColor(id);
     var isFlash = flashTimers[id];
 
@@ -1184,12 +1227,66 @@ function connectSSE() {
   try {
     var evtUrl = (orchestratorUrl || '') + '/api/events';
     var es = new EventSource(evtUrl);
-    es.onopen = function() { console.log('[SSE] Connected to', evtUrl); };
+    es.onopen = function() {
+      console.log('[SSE] Connected to', evtUrl);
+      addRunLogEvent('system', 'dashboard stream connected', '', 'sse-open:' + Date.now(), Date.now());
+    };
+    es.addEventListener('state', function(e) {
+      try {
+        var d = JSON.parse(e.data);
+        syncRunLogFromState(d);
+      } catch(err) {}
+    });
+    es.addEventListener('agent_challenge_start', function(e) {
+      try {
+        var d = JSON.parse(e.data);
+        addRunLogEvent(
+          'agent',
+          'started ' + (d.challengeId || 'unknown challenge') + ' / ' + (d.model || '').toUpperCase() + ' / ' + authLabel(d.auth),
+          d.agentId,
+          'sse-agent-start:' + d.agentId + ':' + d.challengeId + ':' + d.wave,
+          Date.now()
+        );
+      } catch(err) {}
+    });
+    es.addEventListener('tool_call', function(e) {
+      try {
+        var d = JSON.parse(e.data);
+        var key = 'sse-tool-throttle:' + d.agentId + ':' + d.challengeId + ':' + (d.tool || 'tool');
+        if (shouldThrottleLog(key, 10000)) return;
+        addRunLogEvent(
+          'tool',
+          normalizeToolName(d.tool) + ' activity on ' + (d.challengeId || 'current challenge'),
+          d.agentId,
+          'sse-tool:' + key + ':' + Math.floor(Date.now() / 10000),
+          Date.now()
+        );
+      } catch(err) {}
+    });
+    es.addEventListener('graph_hit', function(e) {
+      try {
+        var d = JSON.parse(e.data);
+        addRunLogEvent(
+          'graph',
+          normalizeToolName(d.tool) + ' on ' + (d.challengeId || 'current challenge'),
+          d.agentId,
+          'sse-graph:' + d.agentId + ':' + d.challengeId + ':' + d.tool + ':' + Date.now(),
+          Date.now()
+        );
+      } catch(err) {}
+    });
     es.addEventListener('flag_captured', function(e) {
       try {
         var d = JSON.parse(e.data);
         screenShake();
         addTickerEvent('flag', '<span class="tick-agent">[' + esc((d.agentId || '').slice(0,10)) + ']</span> \\u{2691} ' + esc(d.challengeId || '???') + ' <span class="tick-pts">+' + (d.points || 0) + 'pts</span>');
+        addRunLogEvent(
+          'flag',
+          'captured ' + (d.challengeId || 'unknown challenge') + ' for +' + (d.points || 0) + ' points',
+          d.agentId,
+          'sse-flag:' + d.agentId + ':' + d.challengeId + ':' + (d.timestamp || Date.now()),
+          d.timestamp || Date.now()
+        );
         if (d.agentId) { flashTimers[d.agentId] = true; setTimeout(function() { delete flashTimers[d.agentId]; }, 1500); }
         pollState();
       } catch(err) {}
@@ -1198,12 +1295,33 @@ function connectSSE() {
       try {
         var d = JSON.parse(e.data);
         addTickerEvent('contribute', 'WAVE ' + d.wave + ' STARTED: ' + (d.label || '').toUpperCase() + ' / ' + authLabel(d.auth));
+        addRunLogEvent(
+          'wave',
+          'Wave ' + d.wave + ' started: ' + (d.label || '').toUpperCase() + ' / ' + authLabel(d.auth),
+          '',
+          'sse-wave-start:' + d.wave + ':' + d.label,
+          Date.now()
+        );
       } catch(err) {}
     });
     es.addEventListener('wave_finished', function(e) {
-      try { pollState(); } catch(err) {}
+      try {
+        var d = JSON.parse(e.data);
+        addRunLogEvent(
+          'wave',
+          'Wave ' + d.wave + ' finished: ' + (d.label || '').toUpperCase() + ' / ' + (d.totalSolved || 0) + ' solved / ' + (d.totalScore || 0) + ' pts',
+          '',
+          'sse-wave-end:' + d.wave + ':' + d.label,
+          Date.now()
+        );
+        pollState();
+      } catch(err) {}
     });
-    es.onerror = function() { es.close(); setTimeout(connectSSE, 5000); };
+    es.onerror = function() {
+      addRunLogEvent('error', 'dashboard stream disconnected; reconnecting', '', 'sse-error:' + Date.now(), Date.now());
+      es.close();
+      setTimeout(connectSSE, 5000);
+    };
   } catch(err) {}
 }
 
@@ -1238,22 +1356,12 @@ async function pollState() {
     prevFlagCount = newTotal;
 
     // Render everything
+    syncRunLogFromState(stateRes);
     renderAgents(stateRes);
     renderChallengeGrid(stateRes);
     drawConvergenceChart(stateRes);
     buildTickerFromState(stateRes.flags || []);
   } catch (e) { console.error('State poll error:', e); }
-}
-
-async function pollGraph() {
-  try {
-    var graphRes = await fetch('/api/graph').then(function(r) { return r.json(); });
-    var nodes = graphRes.nodes || [];
-    var edges = graphRes.edges || [];
-    if (gNodes.length !== nodes.length || nodes.some(function(n) { return !gNodes.find(function(g) { return g.id === n.id; }); })) {
-      initGraph(nodes, edges);
-    }
-  } catch (e) { console.error('Graph poll error:', e); }
 }
 
 function updateTimer() {
@@ -1265,9 +1373,7 @@ function updateTimer() {
 
 // Start
 pollState();
-pollGraph();
 setInterval(pollState, 1500);
-setInterval(pollGraph, 5000);
 setInterval(updateTimer, 1000);
 setTimeout(connectSSE, 3000);
 <\/script>

@@ -398,13 +398,13 @@ describe('CTF Framing Wave Contract', () => {
   });
 
   it('buildSystemPrompt with auth none has no inErrata section', () => {
-    const prompt = buildSystemPrompt(EQUALIZATION_WAVES[1]);
+    const prompt = buildSystemPrompt(EQUALIZATION_WAVES[0]);
     expect(prompt).not.toMatch(/inErrata/i);
     expect(prompt).not.toMatch(/mcp__inerrata__/);
   });
 
   it('buildSystemPrompt with anonymous includes read-only tool list', () => {
-    const prompt = buildSystemPrompt(EQUALIZATION_WAVES[2]);
+    const prompt = buildSystemPrompt(EQUALIZATION_WAVES[1]);
     expect(prompt).toContain('read-only');
     expect(prompt).toContain('mcp__inerrata__search');
     expect(prompt).toContain('mcp__inerrata__burst');
@@ -412,24 +412,34 @@ describe('CTF Framing Wave Contract', () => {
   });
 
   it('buildSystemPrompt with authenticated includes full behavioral template', () => {
-    const prompt = buildSystemPrompt(EQUALIZATION_WAVES[0]);
+    const prompt = buildSystemPrompt(EQUALIZATION_WAVES[2]);
     expect(prompt).toContain('Knowledge Graph for AI Agents');
     expect(prompt).toContain('mcp__inerrata__contribute');
   });
 
-  it('EQUALIZATION_WAVES has 4 waves with correct model/auth combos', () => {
-    expect(EQUALIZATION_WAVES.map(w => [w.label, w.model, w.auth])).toEqual([
-      ['opus-cold', 'opus', 'authenticated'],
-      ['haiku-cold', 'haiku', 'none'],
-      ['haiku-anon', 'haiku', 'anonymous'],
-      ['haiku-warm', 'haiku', 'authenticated'],
+  it('EQUALIZATION_WAVES runs every model type in each graph tier', () => {
+    expect(EQUALIZATION_WAVES.map(w => [w.label, w.model, w.auth, w.runtime])).toEqual([
+      ['cold', 'mixed', 'none', 'mixed'],
+      ['anonymous', 'mixed', 'anonymous', 'mixed'],
+      ['authenticated', 'mixed', 'authenticated', 'mixed'],
     ]);
-    expect(EQUALIZATION_WAVES.map(w => w.number)).toEqual([1, 2, 3, 4]);
+    expect(EQUALIZATION_WAVES.map(w => w.number)).toEqual([1, 2, 3]);
+    for (const wave of EQUALIZATION_WAVES) {
+      expect(wave.agents?.map(a => [a.model, a.auth, a.runtime])).toEqual([
+        ['opus', wave.auth, 'claude'],
+        ['sonnet', wave.auth, 'claude'],
+        ['haiku', wave.auth, 'claude'],
+        ['qwen2.5-14b', wave.auth, 'ollama'],
+      ]);
+    }
   });
 
-  it('FUNNEL_WAVES has 3 same-model waves with escalating auth', () => {
-    expect(FUNNEL_WAVES.map(w => w.model)).toEqual(['sonnet', 'sonnet', 'sonnet']);
+  it('FUNNEL_WAVES has 3 graph tiers with every model type', () => {
+    expect(FUNNEL_WAVES.map(w => w.model)).toEqual(['mixed', 'mixed', 'mixed']);
     expect(FUNNEL_WAVES.map(w => w.auth)).toEqual(['none', 'anonymous', 'authenticated']);
     expect(FUNNEL_WAVES.map(w => w.number)).toEqual([1, 2, 3]);
+    for (const wave of FUNNEL_WAVES) {
+      expect(wave.agents?.map(a => a.model)).toEqual(['opus', 'sonnet', 'haiku', 'qwen2.5-14b']);
+    }
   });
 });

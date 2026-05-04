@@ -14,7 +14,7 @@ import { randomUUID, randomBytes } from 'crypto';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
-import { spawn, execSync, exec, type ChildProcess } from 'child_process';
+import { spawn, execSync, execFileSync, exec, type ChildProcess } from 'child_process';
 import { promisify } from 'util';
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
@@ -31,6 +31,7 @@ import type {
   ModelTier,
   ScoredFinding,
   Wave,
+  WaveAgentConfig,
   WaveConfig,
 } from '../shared/types.js';
 import { buildSystemPrompt, buildChallengePrompt } from '../agents/prompts.js';
@@ -57,6 +58,7 @@ export interface BenchmarkConfig {
   reposDir: string;
   timeoutMinutes: number;
   agentsPerWave: number;
+  parallel: number;
   maxDifficulty?: Difficulty;
   challengeId?: string;
 }
@@ -70,7 +72,8 @@ export function parseConfig(argv: string[] = process.argv.slice(2)): BenchmarkCo
       'results-dir': { type: 'string', default: resolve(PROJECT_ROOT, 'results') },
       'repos-dir': { type: 'string', default: resolve(PROJECT_ROOT, 'repos') },
       timeout: { type: 'string', default: '30' },
-      'agents-per-wave': { type: 'string', default: '1' },
+      'agents-per-wave': { type: 'string', default: '4' },
+      parallel: { type: 'string', default: '4' },
       'max-difficulty': { type: 'string' },
       challenge: { type: 'string' },
     },
@@ -93,6 +96,11 @@ export function parseConfig(argv: string[] = process.argv.slice(2)): BenchmarkCo
     throw new Error(`Invalid --agents-per-wave: ${values['agents-per-wave']}. Must be >= 1.`);
   }
 
+  const parallel = parseInt(values.parallel!, 10);
+  if (!Number.isFinite(parallel) || parallel < 1) {
+    throw new Error(`Invalid --parallel: ${values.parallel}. Must be >= 1.`);
+  }
+
   return {
     framing,
     port: parseInt(values.port!, 10),
@@ -100,9 +108,51 @@ export function parseConfig(argv: string[] = process.argv.slice(2)): BenchmarkCo
     reposDir: values['repos-dir']!,
     timeoutMinutes: parseInt(values.timeout!, 10),
     agentsPerWave,
+    parallel,
     maxDifficulty: maxDiff,
     challengeId: values.challenge,
   };
+}
+
+export async function runWithConcurrency<T>(
+  items: T[],
+  parallel: number,
+  worker: (item: T) => Promise<void>,
+): Promise<PromiseSettledResult<void>[]> {
+  const executing = new Set<Promise<void>>();
+  const settled: Promise<PromiseSettledResult<void>>[] = [];
+  const limit = Math.max(1, parallel);
+
+  for (const item of items) {
+    const promise = worker(item);
+    const tracked = promise.finally(() => executing.delete(tracked));
+    executing.add(tracked);
+    settled.push(
+      tracked.then(
+        () => ({ status: 'fulfilled', value: undefined }) as PromiseFulfilledResult<void>,
+        (reason) => ({ status: 'rejected', reason }) as PromiseRejectedResult,
+      ),
+    );
+
+    if (executing.size >= limit) {
+      await Promise.race(executing).catch(() => undefined);
+    }
+  }
+
+  return Promise.all(settled);
+}
+
+export async function runChallengesWithSequentialAgents<TChallenge, TAgent>(
+  challenges: TChallenge[],
+  agents: TAgent[],
+  parallel: number,
+  worker: (agent: TAgent, challenge: TChallenge) => Promise<void>,
+): Promise<PromiseSettledResult<void>[]> {
+  return runWithConcurrency(challenges, parallel, async (challenge) => {
+    for (const agent of agents) {
+      await worker(agent, challenge);
+    }
+  });
 }
 
 export function framingsToRun(framing: FramingCli): BenchmarkFraming[] {
@@ -217,13 +267,51 @@ function checkoutVersion(repoPath: string, tag: string): void {
   }
 }
 
-function spriteForWave(wave: WaveConfig): string {
+function spriteForAgent(agent: AgentConfig): string {
   const base: Record<ModelTier, string> = {
     opus: 'opus-wizard',
     sonnet: 'sonnet-bard',
     haiku: 'haiku-rogue',
+    'qwen2.5-14b': 'haiku-rogue',
   };
-  return `${base[wave.model]} ${wave.spriteType}`;
+  return `${base[agent.model]} ${agent.spriteType}`;
+}
+
+function waveForAgent(wave: WaveConfig, agent: AgentConfig): WaveConfig {
+  return {
+    ...wave,
+    label: agent.waveLabel,
+    model: agent.model,
+    modelId: agent.modelId,
+    runtime: agent.runtime,
+    auth: agent.auth,
+    canContribute: agent.canContribute,
+    spriteType: agent.spriteType,
+  };
+}
+
+export function buildClaudeArgs(opts: {
+  includeModel: boolean;
+  modelId: string;
+  mcpConfigPath: string;
+  systemPrompt: string;
+  challengePrompt: string;
+}): string[] {
+  return [
+    '--print',
+    '--verbose',
+    '--output-format', 'stream-json',
+    '--effort', 'max',
+    ...(opts.includeModel ? ['--model', opts.modelId] : []),
+    '--dangerously-skip-permissions',
+    '--setting-sources', 'project,local',
+    '--strict-mcp-config',
+    '--max-turns', '35',
+    '--mcp-config', opts.mcpConfigPath,
+    '--plugin-dir', PROJECT_ROOT,
+    '--system-prompt', opts.systemPrompt,
+    '-p', opts.challengePrompt,
+  ];
 }
 
 function spawnAuditAgent(opts: {
@@ -234,38 +322,55 @@ function spawnAuditAgent(opts: {
   repoPath: string;
   mcpConfigPath: string;
 }): ChildProcess {
-  const args: string[] = [
-    '--print',
-    '--verbose',
-    '--output-format', 'stream-json',
-    '--effort', 'max',
-    '--model', opts.wave.modelId,
-    '--dangerously-skip-permissions',
-    '--max-turns', '35',
-    '--mcp-config', opts.mcpConfigPath,
-    '--plugin-dir', PROJECT_ROOT,
-    '--system-prompt', opts.systemPrompt,
-    '-p', opts.challengePrompt,
-  ];
+  const commonClaudeArgs = (includeModel: boolean): string[] => buildClaudeArgs({
+    includeModel,
+    modelId: opts.agent.modelId,
+    mcpConfigPath: opts.mcpConfigPath,
+    systemPrompt: opts.systemPrompt,
+    challengePrompt: opts.challengePrompt,
+  });
+
+  if (opts.agent.runtime === 'ollama') {
+    return spawn('ollama', [
+      'launch',
+      'claude',
+      '--model', opts.agent.modelId,
+      '--',
+      ...commonClaudeArgs(false),
+    ], {
+      cwd: opts.repoPath,
+      env: {
+        ...process.env,
+        INERRATA_API_KEY: process.env.INERRATA_API_KEY ?? '',
+        CTF_WAVE_LABEL: opts.agent.waveLabel,
+        CTF_CAN_CONTRIBUTE: opts.agent.canContribute ? 'true' : 'false',
+        CTF_AGENT_SOURCE: `ctf-bench-${opts.wave.label}-${opts.agent.id}`,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  }
+
+  const args = commonClaudeArgs(true);
 
   return spawn('claude', args, {
     cwd: opts.repoPath,
     env: {
       ...process.env,
       INERRATA_API_KEY: process.env.INERRATA_API_KEY ?? '',
-      CTF_WAVE_LABEL: opts.wave.label,
-      CTF_CAN_CONTRIBUTE: opts.wave.canContribute ? 'true' : 'false',
+      CTF_WAVE_LABEL: opts.agent.waveLabel,
+      CTF_CAN_CONTRIBUTE: opts.agent.canContribute ? 'true' : 'false',
       CTF_AGENT_SOURCE: `ctf-bench-${opts.wave.label}-${opts.agent.id}`,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
 
-function parseStreamJson(raw: string): {
+export function parseStreamJson(raw: string): {
   text: string;
   toolCalls: string[];
 } {
-  const text: string[] = [];
+  const assistantText: string[] = [];
+  const resultText: string[] = [];
   const toolCalls: string[] = [];
 
   for (const line of raw.split('\n')) {
@@ -275,7 +380,7 @@ function parseStreamJson(raw: string): {
 
       if (obj.type === 'assistant' && obj.message?.content) {
         for (const block of obj.message.content) {
-          if (block.type === 'text') text.push(block.text);
+          if (block.type === 'text') assistantText.push(block.text);
           if (block.type === 'tool_use') toolCalls.push(block.name);
         }
       }
@@ -285,18 +390,92 @@ function parseStreamJson(raw: string): {
       }
 
       if (obj.type === 'tool_result' || obj.type === 'result') {
-        if (obj.result) text.push(typeof obj.result === 'string' ? obj.result : JSON.stringify(obj.result));
-        if (obj.content) text.push(typeof obj.content === 'string' ? obj.content : JSON.stringify(obj.content));
+        if (obj.result) resultText.push(typeof obj.result === 'string' ? obj.result : JSON.stringify(obj.result));
+        if (obj.content) resultText.push(typeof obj.content === 'string' ? obj.content : JSON.stringify(obj.content));
       }
     } catch {
-      text.push(line);
+      resultText.push(line);
     }
   }
 
+  const text = assistantText.length > 0 ? assistantText : resultText;
   return { text: text.join('\n'), toolCalls };
 }
 
-function parseFindings(output: string, agentId: string): Finding[] {
+function stripMarkdown(value: string | undefined): string {
+  return (value ?? '')
+    .replace(/```[\s\S]*?```/g, block => block.replace(/```[a-zA-Z]*\n?/g, '').replace(/```/g, ''))
+    .replace(/\*\*/g, '')
+    .replace(/`/g, '')
+    .trim();
+}
+
+function firstLineValue(markdown: string, labels: string[]): string | undefined {
+  const escaped = labels.map(label => label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const re = new RegExp(`^\\s*(?:[-*]\\s*)?(?:${escaped})\\s*[:：]\\s*(.+)$`, 'i');
+  for (const line of markdown.split('\n')) {
+    const match = stripMarkdown(line).match(re);
+    if (match?.[1]) return stripMarkdown(match[1]);
+  }
+  return undefined;
+}
+
+function extractFileFromMarkdown(markdown: string): string {
+  const labelled = firstLineValue(markdown, ['vulnerableFile', 'File', 'Location']);
+  const source = labelled || markdown;
+  const codePath = source.match(/`?([A-Za-z0-9_./-]+\.(?:c|h|cc|cpp))`?/);
+  return stripMarkdown(codePath?.[1] || labelled || '');
+}
+
+function extractFunctionFromMarkdown(markdown: string): string | undefined {
+  const labelled = firstLineValue(markdown, ['vulnerableFunction', 'Function']);
+  if (!labelled) return undefined;
+  const codeName = labelled.match(/`?([A-Za-z_][A-Za-z0-9_]*)`?/);
+  return stripMarkdown(codeName?.[1] || labelled);
+}
+
+function extractLineRangeFromMarkdown(markdown: string): [number, number] | undefined {
+  const line = firstLineValue(markdown, ['lineRange', 'Lines', 'Line']);
+  const source = line || markdown.match(/(?:lineRange|Lines?|Line)\D+(\d+)(?:\D+(\d+))?/i)?.[0] || '';
+  const match = source.match(/(\d+)(?:\D+(\d+))?/);
+  if (!match) return undefined;
+  const start = Number(match[1]);
+  const end = Number(match[2] ?? match[1]);
+  return Number.isFinite(start) && Number.isFinite(end) ? [start, end] : undefined;
+}
+
+function sectionText(markdown: string, labels: string[]): string | undefined {
+  for (const label of labels) {
+    const re = new RegExp(`(?:^|\\n)\\s*(?:[-*]\\s*)?(?:\\*\\*)?${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\*\\*)?\\s*[:：]\\s*([\\s\\S]*?)(?=\\n\\s*(?:[-*]\\s*)?(?:\\*\\*)?[A-Z][A-Za-z ]{2,40}(?:\\*\\*)?\\s*[:：]|$)`, 'i');
+    const match = markdown.match(re);
+    if (match?.[1]) return stripMarkdown(match[1]);
+  }
+  return undefined;
+}
+
+function markdownFinding(raw: string, agentId: string, challenge: Challenge | undefined): Finding | null {
+  const vulnerableFile = extractFileFromMarkdown(raw);
+  const explanation = sectionText(raw, ['explanation', 'description', 'vulnerability details', 'details'])
+    || stripMarkdown(raw);
+
+  if (!challenge && !vulnerableFile && explanation.length < 20) return null;
+
+  return {
+    agentId,
+    challengeId: challenge?.id ?? firstLineValue(raw, ['challengeId', 'CVE']) ?? '',
+    timestamp: Date.now(),
+    vulnerableFile,
+    vulnerableFunction: extractFunctionFromMarkdown(raw),
+    lineRange: extractLineRangeFromMarkdown(raw),
+    bugClass: challenge?.bugClass ?? 'logic-bug',
+    explanation,
+    pocCode: sectionText(raw, ['pocCode', 'proof of concept', 'poc', 'example code', 'impact']),
+    patchSuggestion: sectionText(raw, ['patchSuggestion', 'fix recommendation', 'fix', 'patch']),
+    crossRepoPattern: sectionText(raw, ['crossRepoPattern', 'cross repo pattern']),
+  };
+}
+
+export function parseFindings(output: string, agentId: string, challenge?: Challenge): Finding[] {
   const findings: Finding[] = [];
   const findingRegex = /<finding>\s*([\s\S]*?)\s*<\/finding>/g;
   let match: RegExpExecArray | null;
@@ -311,14 +490,16 @@ function parseFindings(output: string, agentId: string): Finding[] {
         vulnerableFile: raw.vulnerableFile ?? '',
         vulnerableFunction: raw.vulnerableFunction,
         lineRange: raw.lineRange,
-        bugClass: raw.bugClass ?? 'logic-bug',
+        bugClass: raw.bugClass ?? challenge?.bugClass ?? 'logic-bug',
         explanation: raw.explanation ?? '',
         pocCode: raw.pocCode,
         patchSuggestion: raw.patchSuggestion,
         crossRepoPattern: raw.crossRepoPattern,
       });
     } catch {
-      console.warn(`[orchestrator] Failed to parse finding block from ${agentId}`);
+      const fallback = markdownFinding(match[1], agentId, challenge);
+      if (fallback) findings.push(fallback);
+      else console.warn(`[orchestrator] Failed to parse finding block from ${agentId}`);
     }
   }
 
@@ -368,9 +549,11 @@ function ensureAgentState(agent: AgentConfig, wave: WaveConfig, challenge: Chall
       id: agent.id,
       name: agent.name,
       model: agent.model,
+      modelId: agent.modelId,
+      runtime: agent.runtime,
       auth: agent.auth,
       waveLabel: wave.label,
-      sprite: spriteForWave(wave),
+      sprite: spriteForAgent(agent),
       status: 'running',
       currentChallenge: challenge.id,
       currentRepo: challenge.repo,
@@ -440,12 +623,13 @@ async function runAgentForChallenge(opts: {
   });
 
   checkoutVersion(repoPath, challenge.affectedVersion);
+  const agentWave = waveForAgent(wave, agent);
 
   const child = spawnAuditAgent({
     agent,
-    wave,
-    systemPrompt: buildSystemPrompt(wave),
-    challengePrompt: buildChallengePrompt(challenge, wave),
+    wave: agentWave,
+    systemPrompt: buildSystemPrompt(agentWave),
+    challengePrompt: buildChallengePrompt(challenge, agentWave),
     repoPath,
     mcpConfigPath: opts.mcpConfigPath,
   });
@@ -477,7 +661,7 @@ async function runAgentForChallenge(opts: {
     }
   }
 
-  const rawFindings = parseFindings(parsed.text, agent.id);
+  const rawFindings = parseFindings(parsed.text, agent.id, challenge);
   const scoredFindings = scoreAllFindings(rawFindings);
 
   for (const finding of scoredFindings) {
@@ -523,6 +707,66 @@ async function prepareRepos(challenges: Challenge[], reposDir: string): Promise<
   return repoPaths;
 }
 
+function safePathSegment(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+function ensureAgentRepo(baseRepoPath: string, reposDir: string, agentId: string, repoName: string): string {
+  const repoPath = resolve(reposDir, '_agents', safePathSegment(agentId), safePathSegment(repoName));
+  if (existsSync(resolve(repoPath, '.git'))) return repoPath;
+
+  mkdirSync(dirname(repoPath), { recursive: true });
+  execFileSync('git', ['-C', baseRepoPath, 'worktree', 'add', '--force', '--detach', repoPath], {
+    stdio: 'pipe',
+    timeout: 120_000,
+  });
+  return repoPath;
+}
+
+function agentFromWaveEntry(wave: WaveConfig, entry: WaveAgentConfig): AgentConfig {
+  const suffix = randomBytes(3).toString('hex');
+  return {
+    id: `${entry.label}-w${wave.number}-${suffix}`,
+    name: entry.name ?? entry.label,
+    model: entry.model,
+    modelId: entry.modelId,
+    runtime: entry.runtime,
+    auth: entry.auth,
+    wave: wave.number,
+    waveLabel: entry.label,
+    spriteType: entry.spriteType,
+    canContribute: entry.canContribute,
+  };
+}
+
+function agentsForWave(wave: WaveConfig, agentsPerWave: number): AgentConfig[] {
+  if (wave.agents) {
+    return wave.agents.map(entry => agentFromWaveEntry(wave, entry));
+  }
+
+  if (wave.model === 'mixed' || wave.runtime === 'mixed') {
+    throw new Error(`Wave ${wave.label} is mixed but has no explicit agent roster.`);
+  }
+
+  const agents: AgentConfig[] = [];
+  for (let i = 0; i < agentsPerWave; i++) {
+    const suffix = agentsPerWave === 1 ? randomBytes(3).toString('hex') : `a${i + 1}-${randomBytes(2).toString('hex')}`;
+    agents.push({
+      id: `${wave.label}-w${wave.number}-${suffix}`,
+      name: `${wave.label}${agentsPerWave > 1 ? `-${i + 1}` : ''}`,
+      model: wave.model,
+      modelId: wave.modelId,
+      runtime: wave.runtime,
+      auth: wave.auth,
+      wave: wave.number,
+      waveLabel: wave.label,
+      spriteType: wave.spriteType,
+      canContribute: wave.canContribute,
+    });
+  }
+  return agents;
+}
+
 async function runWave(opts: {
   wave: WaveConfig;
   framing: BenchmarkFraming;
@@ -546,6 +790,7 @@ async function runWave(opts: {
     auth: wave.auth,
     model: wave.model,
     modelId: wave.modelId,
+    runtime: wave.runtime,
     canContribute: wave.canContribute,
     graphState: wave.graphState,
     description: wave.description,
@@ -560,25 +805,16 @@ async function runWave(opts: {
     label: wave.label,
     model: wave.model,
     modelId: wave.modelId,
+    runtime: wave.runtime,
     auth: wave.auth,
     description: wave.description,
     canContribute: wave.canContribute,
   });
 
-  const agents: AgentConfig[] = [];
-  for (let i = 0; i < config.agentsPerWave; i++) {
-    const suffix = config.agentsPerWave === 1 ? randomBytes(3).toString('hex') : `a${i + 1}-${randomBytes(2).toString('hex')}`;
-    const agent: AgentConfig = {
-      id: `${wave.label}-w${wave.number}-${suffix}`,
-      name: `${wave.label}${config.agentsPerWave > 1 ? `-${i + 1}` : ''}`,
-      model: wave.model,
-      auth: wave.auth,
-      wave: wave.number,
-      waveLabel: wave.label,
-      spriteType: wave.spriteType,
-      canContribute: wave.canContribute,
-    };
-    agents.push(agent);
+  const agents = agentsForWave(wave, config.agentsPerWave);
+  console.log(`  Agents: ${agents.map(agent => agent.name).join(', ')}`);
+
+  for (const agent of agents) {
     waveRecord.scores[agent.id] = {};
   }
 
@@ -602,14 +838,7 @@ async function runWave(opts: {
     });
   }
 
-  for (const agent of agents) {
-    const mcpConfigPath = buildMcpConfig({
-      auth: wave.auth,
-      apiKey,
-      resultsDir: framingResultsDir,
-      agentId: agent.id,
-    });
-
+  const settled = await runWithConcurrency(agents, config.parallel, async (agent) => {
     for (const challenge of challenges) {
       const repoPath = repoPaths.get(challenge.repo);
       if (!repoPath) {
@@ -617,11 +846,19 @@ async function runWave(opts: {
         continue;
       }
 
+      const agentRepoPath = ensureAgentRepo(repoPath, config.reposDir, agent.id, challenge.repo);
+      const mcpConfigPath = buildMcpConfig({
+        auth: agent.auth,
+        apiKey,
+        resultsDir: framingResultsDir,
+        agentId: agent.id,
+      });
+
       const result = await runAgentForChallenge({
         agent,
         wave,
         challenge,
-        repoPath,
+        repoPath: agentRepoPath,
         config,
         framingResultsDir,
         mcpConfigPath,
@@ -637,7 +874,14 @@ async function runWave(opts: {
       waveRecord.scores[agent.id][challenge.id] = bestScore;
       if (result.findings.some(isSolved)) tracker.challengesSolved++;
     }
+  });
 
+  const failedAgents = settled.filter(result => result.status === 'rejected');
+  if (failedAgents.length > 0) {
+    console.warn(`[orchestrator] ${failedAgents.length} agent worker(s) failed in wave ${wave.label}.`);
+  }
+
+  for (const agent of agents) {
     const state = agentStates[agent.id];
     if (state) {
       state.status = 'finished';
@@ -737,9 +981,14 @@ function writeComparison(result: FramingResult, resultsDir: string) {
   if (result.framing === 'equalization') {
     const opus = comparison.find(row => row.label === 'opus-cold');
     const haiku = comparison.find(row => row.label === 'haiku-warm');
+    const qwen = comparison.find(row => row.label === 'qwen2.5-14b-cold');
     if (opus && haiku) {
       const ratio = opus.totalScore > 0 ? Math.round((haiku.totalScore / opus.totalScore) * 100) : 0;
       lines.push('', `Haiku warm reached ${ratio}% of Opus cold score.`);
+    }
+    if (opus && qwen) {
+      const ratio = opus.totalScore > 0 ? Math.round((qwen.totalScore / opus.totalScore) * 100) : 0;
+      lines.push(`Qwen2.5 14B local cold reached ${ratio}% of Opus cold score.`);
     }
   }
 
@@ -819,11 +1068,19 @@ async function main() {
   const config = parseConfig();
   const selectedChallenges = selectChallenges(config);
   activeChallenges = selectedChallenges;
+  const selectedWaveConfigs = framingsToRun(config.framing).flatMap(framing => wavesForFraming(framing));
+  const rosteredAgentCounts = selectedWaveConfigs
+    .map(wave => wave.agents?.length)
+    .filter((count): count is number => typeof count === 'number');
+  const agentsPerTierLabel = rosteredAgentCounts.length > 0
+    ? `rostered (${Math.max(...rosteredAgentCounts)} model types)`
+    : `${config.agentsPerWave}`;
 
   console.log(`\n${'='.repeat(72)}`);
   console.log('  GNU Security Audit CTF Benchmark');
   console.log(`  Framing:        ${config.framing}`);
-  console.log(`  Agents/wave:    ${config.agentsPerWave}`);
+  console.log(`  Agents/tier:    ${agentsPerTierLabel}`);
+  console.log(`  Parallel agents:${config.parallel}`);
   if (config.maxDifficulty) console.log(`  Max difficulty: ${config.maxDifficulty}/5`);
   if (config.challengeId) console.log(`  Challenge:      ${config.challengeId}`);
   console.log(`  Challenges:     ${selectedChallenges.length}`);

@@ -8,7 +8,16 @@
 // ---------------------------------------------------------------------------
 
 /** All model tiers used in the benchmark. */
-export type ModelTier = 'opus' | 'sonnet' | 'haiku';
+export type ModelTier = 'opus' | 'sonnet' | 'haiku' | 'qwen2.5-14b';
+
+/** Display model for a wave; mixed waves contain multiple concrete agent models. */
+export type WaveModel = ModelTier | 'mixed';
+
+/** Runtime used to execute an agent model. */
+export type AgentRuntime = 'claude' | 'ollama';
+
+/** Display runtime for a wave; mixed waves contain multiple concrete runtimes. */
+export type WaveRuntime = AgentRuntime | 'mixed';
 
 /** inErrata access level for a benchmark wave. */
 export type AuthLevel = 'none' | 'anonymous' | 'authenticated';
@@ -72,6 +81,8 @@ export interface AgentConfig {
   id: string;
   name: string;
   model: ModelTier;
+  modelId: string;
+  runtime: AgentRuntime;
   auth: AuthLevel;
   wave: number;
   waveLabel: string;
@@ -79,17 +90,31 @@ export interface AgentConfig {
   canContribute: boolean;
 }
 
+/** Concrete agent roster entry for a mixed wave/tier. */
+export interface WaveAgentConfig {
+  label: string;
+  name?: string;
+  model: ModelTier;
+  modelId: string;
+  runtime: AgentRuntime;
+  auth: AuthLevel;
+  canContribute: boolean;
+  spriteType: string;
+}
+
 /** Wave configuration used by the orchestrator and prompt builder. */
 export interface WaveConfig {
   number: number;
   label: string;
-  model: ModelTier;
+  model: WaveModel;
   modelId: string;
+  runtime: WaveRuntime;
   auth: AuthLevel;
   graphState: GraphState;
   canContribute: boolean;
   spriteType: string;
   description: string;
+  agents?: WaveAgentConfig[];
 }
 
 // ---------------------------------------------------------------------------
@@ -147,6 +172,8 @@ export interface AgentState {
   id: string;
   name: string;
   model: ModelTier;
+  modelId: string;
+  runtime: AgentRuntime;
   auth: AuthLevel;
   waveLabel: string;
   sprite: string; // opus-wizard | sonnet-bard | haiku-rogue
@@ -167,8 +194,9 @@ export interface Wave {
   label: string;
   mode: AuthLevel;
   auth: AuthLevel;
-  model: ModelTier;
+  model: WaveModel;
   modelId: string;
+  runtime: WaveRuntime;
   canContribute: boolean;
   graphState: GraphState;
   description: string;
@@ -220,7 +248,8 @@ export interface GraphEdge {
 // ---------------------------------------------------------------------------
 
 export const MODEL_IDS: Record<ModelTier, string> = {
-  opus: 'claude-opus-4-20250514',
-  sonnet: 'claude-sonnet-4-20250514',
-  haiku: 'claude-haiku-3-5-20241022',
+  opus: 'opus',
+  sonnet: 'sonnet',
+  haiku: 'haiku',
+  'qwen2.5-14b': process.env.CTF_QWEN_MODEL ?? process.env.OLLAMA_QWEN_MODEL ?? 'qwen2.5:14b',
 };

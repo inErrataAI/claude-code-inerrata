@@ -1,87 +1,122 @@
 import { MODEL_IDS } from '../shared/types.js';
-import type { WaveConfig } from '../shared/types.js';
+import type { AuthLevel, GraphState, WaveAgentConfig, WaveConfig } from '../shared/types.js';
+
+function tierAgents(label: string, auth: AuthLevel, canContribute: boolean): WaveAgentConfig[] {
+  return [
+    {
+      label: `${label}-opus`,
+      model: 'opus',
+      modelId: MODEL_IDS.opus,
+      runtime: 'claude',
+      auth,
+      canContribute,
+      spriteType: 'opus',
+    },
+    {
+      label: `${label}-sonnet`,
+      model: 'sonnet',
+      modelId: MODEL_IDS.sonnet,
+      runtime: 'claude',
+      auth,
+      canContribute,
+      spriteType: auth === 'authenticated' ? 'sonnet-warm' : auth === 'anonymous' ? 'sonnet-anon' : 'sonnet',
+    },
+    {
+      label: `${label}-haiku`,
+      model: 'haiku',
+      modelId: MODEL_IDS.haiku,
+      runtime: 'claude',
+      auth,
+      canContribute,
+      spriteType: auth === 'authenticated' ? 'haiku-warm' : auth === 'anonymous' ? 'haiku-anon' : 'haiku',
+    },
+    {
+      label: `${label}-qwen2.5-14b`,
+      model: 'qwen2.5-14b',
+      modelId: MODEL_IDS['qwen2.5-14b'],
+      runtime: 'ollama',
+      auth,
+      canContribute,
+      spriteType: 'qwen2.5-14b',
+    },
+  ];
+}
+
+function tierWave(
+  number: number,
+  label: string,
+  auth: AuthLevel,
+  graphState: GraphState,
+  canContribute: boolean,
+  description: string,
+): WaveConfig {
+  return {
+    number,
+    label,
+    model: 'mixed',
+    modelId: 'mixed',
+    runtime: 'mixed',
+    auth,
+    graphState,
+    canContribute,
+    spriteType: 'mixed',
+    description,
+    agents: tierAgents(label, auth, canContribute),
+  };
+}
 
 export const EQUALIZATION_WAVES: WaveConfig[] = [
-  {
-    number: 1,
-    label: 'opus-cold',
-    model: 'opus',
-    modelId: MODEL_IDS.opus,
-    auth: 'authenticated',
-    graphState: 'empty',
-    canContribute: true,
-    spriteType: 'opus',
-    description: 'Opus with no prior benchmark knowledge; sets the intelligence ceiling.',
-  },
-  {
-    number: 2,
-    label: 'haiku-cold',
-    model: 'haiku',
-    modelId: MODEL_IDS.haiku,
-    auth: 'none',
-    graphState: 'empty',
-    canContribute: false,
-    spriteType: 'haiku',
-    description: 'Haiku with no graph and no tools; sets the cost floor.',
-  },
-  {
-    number: 3,
-    label: 'haiku-anon',
-    model: 'haiku',
-    modelId: MODEL_IDS.haiku,
-    auth: 'anonymous',
-    graphState: 'warm',
-    canContribute: false,
-    spriteType: 'haiku-anon',
-    description: 'Haiku with anonymous read-only graph access; shows free-tier value.',
-  },
-  {
-    number: 4,
-    label: 'haiku-warm',
-    model: 'haiku',
-    modelId: MODEL_IDS.haiku,
-    auth: 'authenticated',
-    graphState: 'warm',
-    canContribute: true,
-    spriteType: 'haiku-warm',
-    description: 'Haiku with full graph access; shows the equalizing compound loop.',
-  },
+  tierWave(
+    1,
+    'cold',
+    'none',
+    'empty',
+    false,
+    'Cold baseline: Opus, Sonnet, Haiku, and local Qwen run without graph access.',
+  ),
+  tierWave(
+    2,
+    'anonymous',
+    'anonymous',
+    'warm',
+    false,
+    'Read-only graph tier: every model gets anonymous inErrata search and graph context.',
+  ),
+  tierWave(
+    3,
+    'authenticated',
+    'authenticated',
+    'warm',
+    true,
+    'Full graph tier: every model gets authenticated inErrata read/write access.',
+  ),
 ];
 
 export const FUNNEL_WAVES: WaveConfig[] = [
-  {
-    number: 1,
-    label: 'blind',
-    model: 'sonnet',
-    modelId: MODEL_IDS.sonnet,
-    auth: 'none',
-    graphState: 'production',
-    canContribute: false,
-    spriteType: 'sonnet',
-    description: 'Sonnet blind; no graph access.',
-  },
-  {
-    number: 2,
-    label: 'anon',
-    model: 'sonnet',
-    modelId: MODEL_IDS.sonnet,
-    auth: 'anonymous',
-    graphState: 'production',
-    canContribute: false,
-    spriteType: 'sonnet-anon',
-    description: 'Sonnet with anonymous read-only graph access.',
-  },
-  {
-    number: 3,
-    label: 'authed',
-    model: 'sonnet',
-    modelId: MODEL_IDS.sonnet,
-    auth: 'authenticated',
-    graphState: 'production',
-    canContribute: true,
-    spriteType: 'sonnet-warm',
-    description: 'Sonnet with full graph access; reads, writes, and compounds.',
-  },
+  tierWave(
+    1,
+    'blind',
+    'none',
+    'production',
+    false,
+    'Blind tier: every model runs without graph access.',
+  ),
+  tierWave(
+    2,
+    'anon',
+    'anonymous',
+    'production',
+    false,
+    'Anonymous tier: every model gets read-only graph access.',
+  ),
+  tierWave(
+    3,
+    'authed',
+    'authenticated',
+    'production',
+    true,
+    'Authenticated tier: every model reads, writes, and compounds graph knowledge.',
+  ),
 ];
 
 export function wavesForFraming(framing: 'equalization' | 'funnel'): WaveConfig[] {
