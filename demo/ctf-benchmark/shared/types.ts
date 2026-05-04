@@ -8,7 +8,7 @@
 // ---------------------------------------------------------------------------
 
 /** All model tiers used in the demo. */
-export type ModelTier = 'opus' | 'sonnet' | 'haiku' | 'qwen2.5-14b';
+export type ModelTier = 'opus' | 'sonnet' | 'haiku' | 'qwen3-14b';
 
 /** Display model for a wave; mixed waves contain multiple concrete agent models. */
 export type WaveModel = ModelTier | 'mixed';
@@ -254,5 +254,5 @@ export const MODEL_IDS: Record<ModelTier, string> = {
   opus: 'opus',
   sonnet: 'sonnet',
   haiku: 'haiku',
-  'qwen2.5-14b': process.env.CTF_QWEN_MODEL ?? process.env.OLLAMA_QWEN_MODEL ?? 'qwen2.5:14b',
+  'qwen3-14b': process.env.CTF_QWEN_MODEL ?? process.env.OLLAMA_QWEN_MODEL ?? 'qwen3:14b',
 };

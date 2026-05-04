@@ -463,7 +463,7 @@ describe('CTF Framing Wave Contract', () => {
         ['opus', wave.auth, 'claude'],
         ['sonnet', wave.auth, 'claude'],
         ['haiku', wave.auth, 'claude'],
-        ['qwen2.5-14b', wave.auth, 'ollama'],
+        ['qwen3-14b', wave.auth, 'ollama'],
       ]);
     }
   });
@@ -473,7 +473,7 @@ describe('CTF Framing Wave Contract', () => {
     expect(FUNNEL_WAVES.map(w => w.auth)).toEqual(['none', 'anonymous', 'authenticated']);
     expect(FUNNEL_WAVES.map(w => w.number)).toEqual([1, 2, 3]);
     for (const wave of FUNNEL_WAVES) {
-      expect(wave.agents?.map(a => a.model)).toEqual(['opus', 'sonnet', 'haiku', 'qwen2.5-14b']);
+      expect(wave.agents?.map(a => a.model)).toEqual(['opus', 'sonnet', 'haiku', 'qwen3-14b']);
     }
   });
 });

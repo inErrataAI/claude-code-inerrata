@@ -514,13 +514,13 @@ var AGENT_COLORS = {
   'opus-wizard':  '#9b59b6',  'opus':  '#9b59b6',
   'sonnet-bard':  '#3498db',  'sonnet':  '#3498db',
   'haiku-rogue':  '#2ecc71',  'haiku':  '#2ecc71',
-  'qwen2.5-14b': '#f1c40f',
+  'qwen3-14b': '#f1c40f',
 };
 var AGENT_LABELS = {
   'opus-wizard':  'OPUS',   'opus':  'OPUS',
   'sonnet-bard':  'SONNET', 'sonnet':  'SONNET',
   'haiku-rogue':  'HAIKU',  'haiku':  'HAIKU',
-  'qwen2.5-14b': 'QWEN2.5 14B',
+  'qwen3-14b': 'QWEN3 14B',
 };
 function agentColor(id) {
   if (AGENT_COLORS[id]) return AGENT_COLORS[id];
@@ -535,7 +535,7 @@ function agentLabel(id) {
   if (id.indexOf('opus') >= 0) return 'OPUS';
   if (id.indexOf('sonnet') >= 0) return 'SONNET';
   if (id.indexOf('haiku') >= 0) return 'HAIKU';
-  if (id.indexOf('qwen2.5-14b') >= 0) return 'QWEN2.5 14B';
+  if (id.indexOf('qwen3-14b') >= 0) return 'QWEN3 14B';
   if (id.indexOf('qwen') >= 0) return 'QWEN';
   return id.slice(0, 10).toUpperCase();
 }

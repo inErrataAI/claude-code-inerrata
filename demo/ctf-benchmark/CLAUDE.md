@@ -59,8 +59,9 @@ npx tsx dashboard/serve.ts
 ## Environment
 
 - `INERRATA_API_KEY` for authenticated waves
-- `CTF_QWEN_MODEL` or `OLLAMA_QWEN_MODEL` to override the local Qwen model (defaults to `qwen2.5:14b`)
+- `CTF_QWEN_MODEL` or `OLLAMA_QWEN_MODEL` to override the local Qwen model (defaults to `qwen3:14b`)
+- `CTF_MAX_OUTPUT_TOKENS` or `MAX_OUTPUT_TOKENS` to tune Claude Code subprocess visible output headroom (defaults to `8192`)
 - Network access to `mcp.inerrata.ai`
 - `claude` CLI installed and authenticated
-- `ollama` CLI installed with `qwen2.5:14b` pulled for the local Qwen trial
+- `ollama` CLI installed with `qwen3:14b` pulled for the local Qwen trial
 - Node.js 22+

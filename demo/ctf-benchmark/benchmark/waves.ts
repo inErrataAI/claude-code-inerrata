@@ -31,13 +31,13 @@ function tierAgents(label: string, auth: AuthLevel, canContribute: boolean): Wav
       spriteType: auth === 'authenticated' ? 'haiku-warm' : auth === 'anonymous' ? 'haiku-anon' : 'haiku',
     },
     {
-      label: `${label}-qwen2.5-14b`,
-      model: 'qwen2.5-14b',
-      modelId: MODEL_IDS['qwen2.5-14b'],
+      label: `${label}-qwen3-14b`,
+      model: 'qwen3-14b',
+      modelId: MODEL_IDS['qwen3-14b'],
       runtime: 'ollama',
       auth,
       canContribute,
-      spriteType: 'qwen2.5-14b',
+      spriteType: 'qwen3-14b',
     },
   ];
 }

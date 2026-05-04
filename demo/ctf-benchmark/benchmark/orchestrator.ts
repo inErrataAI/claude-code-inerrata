@@ -275,7 +275,7 @@ function spriteForAgent(agent: AgentConfig): string {
     opus: 'opus-wizard',
     sonnet: 'sonnet-bard',
     haiku: 'haiku-rogue',
-    'qwen2.5-14b': 'haiku-rogue',
+    'qwen3-14b': 'haiku-rogue',
   };
   return `${base[agent.model]} ${agent.spriteType}`;
 }
@@ -400,6 +400,10 @@ function spawnAuditAgent(opts: {
     env: {
       ...process.env,
       INERRATA_API_KEY: process.env.INERRATA_API_KEY ?? '',
+      CLAUDE_CODE_MAX_OUTPUT_TOKENS: process.env.CTF_MAX_OUTPUT_TOKENS
+        ?? process.env.MAX_OUTPUT_TOKENS
+        ?? process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS
+        ?? '8192',
       CTF_WAVE_LABEL: opts.agent.waveLabel,
       CTF_CAN_CONTRIBUTE: opts.agent.canContribute ? 'true' : 'false',
       CTF_AGENT_SOURCE: `ctf-bench-${opts.wave.label}-${opts.agent.id}`,
@@ -438,14 +442,31 @@ export function parseStreamJson(raw: string): {
   const resultText: string[] = [];
   const toolCalls: string[] = [];
 
+  const visibleTextFromContent = (content: unknown): string[] => {
+    if (typeof content === 'string') return [content];
+    if (!Array.isArray(content)) return [];
+
+    return content.flatMap((block) => {
+      if (typeof block === 'string') return [block];
+      if (!block || typeof block !== 'object') return [];
+      const typed = block as { type?: string; text?: string; content?: unknown };
+      if (typed.type === 'text' && typeof typed.text === 'string') return [typed.text];
+      if (typed.type === 'thinking' || typed.type === 'redacted_thinking') return [];
+      if (typeof typed.content === 'string' && typed.type !== 'thinking') return [typed.content];
+      return [];
+    });
+  };
+
   for (const line of raw.split('\n')) {
     if (!line.trim()) continue;
     try {
       const obj = JSON.parse(line);
 
       if (obj.type === 'assistant' && obj.message?.content) {
+        for (const text of visibleTextFromContent(obj.message.content)) {
+          assistantText.push(text);
+        }
         for (const block of obj.message.content) {
-          if (block.type === 'text') assistantText.push(block.text);
           if (block.type === 'tool_use') toolCalls.push(block.name);
         }
       }
@@ -455,8 +476,11 @@ export function parseStreamJson(raw: string): {
       }
 
       if (obj.type === 'tool_result' || obj.type === 'result') {
-        if (obj.result) resultText.push(typeof obj.result === 'string' ? obj.result : JSON.stringify(obj.result));
-        if (obj.content) resultText.push(typeof obj.content === 'string' ? obj.content : JSON.stringify(obj.content));
+        if (obj.result) {
+          const visible = visibleTextFromContent(obj.result);
+          resultText.push(...(visible.length ? visible : typeof obj.result === 'string' ? [obj.result] : []));
+        }
+        if (obj.content) resultText.push(...visibleTextFromContent(obj.content));
       }
     } catch {
       resultText.push(line);
@@ -1059,14 +1083,14 @@ function writeComparison(result: FramingResult, resultsDir: string) {
   if (result.framing === 'equalization') {
     const opus = comparison.find(row => row.label === 'opus-cold');
     const haiku = comparison.find(row => row.label === 'haiku-warm');
-    const qwen = comparison.find(row => row.label === 'qwen2.5-14b-cold');
+    const qwen = comparison.find(row => row.label === 'qwen3-14b-cold');
     if (opus && haiku) {
       const ratio = opus.totalScore > 0 ? Math.round((haiku.totalScore / opus.totalScore) * 100) : 0;
       lines.push('', `Haiku warm reached ${ratio}% of Opus cold score.`);
     }
     if (opus && qwen) {
       const ratio = opus.totalScore > 0 ? Math.round((qwen.totalScore / opus.totalScore) * 100) : 0;
-      lines.push(`Qwen2.5 14B local cold reached ${ratio}% of Opus cold score.`);
+      lines.push(`Qwen3 14B local cold reached ${ratio}% of Opus cold score.`);
     }
   }
 

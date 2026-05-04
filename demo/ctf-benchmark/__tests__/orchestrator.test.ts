@@ -96,6 +96,30 @@ describe('CTF Cold-To-Warm Demo orchestrator config', () => {
     expect(parseStreamJson(raw).text).toBe('assistant answer');
   });
 
+  it('ignores thinking blocks when extracting scorable output', () => {
+    const raw = [
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'thinking', thinking: 'hidden reasoning that should not be scored' },
+            { type: 'text', text: '<finding>{"challengeId":"current"}</finding>' },
+          ],
+        },
+      }),
+      JSON.stringify({
+        type: 'result',
+        content: [
+          { type: 'thinking', thinking: 'more hidden reasoning' },
+        ],
+      }),
+    ].join('\n');
+
+    const parsed = parseStreamJson(raw);
+    expect(parsed.text).toBe('<finding>{"challengeId":"current"}</finding>');
+    expect(parsed.text).not.toContain('hidden reasoning');
+  });
+
   it('falls back to markdown finding blocks for local Qwen output', () => {
     const challenge = CHALLENGES[0];
     const findings = parseFindings(

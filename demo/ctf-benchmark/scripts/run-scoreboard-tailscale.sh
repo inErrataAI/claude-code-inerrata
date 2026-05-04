@@ -9,10 +9,11 @@ FRAMING=${FRAMING:-equalization}
 AGENTS_PER_WAVE=${AGENTS_PER_WAVE:-1}
 PARALLEL=${PARALLEL:-4}
 TIMEOUT_MINUTES=${TIMEOUT_MINUTES:-30}
+MAX_OUTPUT_TOKENS=${MAX_OUTPUT_TOKENS:-${CTF_MAX_OUTPUT_TOKENS:-8192}}
 RUN_STAMP=${RUN_STAMP:-$(date +%Y%m%d-%H%M%S)}
 RESULTS_DIR=${RESULTS_DIR:-"$PROJECT_ROOT/results/live-scoreboard-$RUN_STAMP"}
 LOG_FILE=${LOG_FILE:-"$PROJECT_ROOT/results/run-logs/benchmark-$RUN_STAMP.log"}
-CTF_QWEN_MODEL=${CTF_QWEN_MODEL:-qwen2.5:14b}
+CTF_QWEN_MODEL=${CTF_QWEN_MODEL:-qwen3:14b}
 
 mkdir -p "$(dirname "$LOG_FILE")" "$RESULTS_DIR"
 exec >>"$LOG_FILE" 2>&1
@@ -50,6 +51,7 @@ if ! load_inerrata_key; then
 fi
 
 export CTF_QWEN_MODEL
+export CTF_MAX_OUTPUT_TOKENS=$MAX_OUTPUT_TOKENS
 
 if [[ -x "$HOME/.local/share/fnm/fnm" ]]; then
   eval "$("$HOME/.local/share/fnm/fnm" env --shell bash)"
@@ -85,6 +87,7 @@ echo "[scoreboard] URL: http://127.0.0.1:$PORT/"
 echo "[scoreboard] Framing: $FRAMING"
 echo "[scoreboard] Agents/wave override: $AGENTS_PER_WAVE"
 echo "[scoreboard] Parallel: $PARALLEL"
+echo "[scoreboard] Max output tokens: $MAX_OUTPUT_TOKENS"
 echo "[scoreboard] Results: $RESULTS_DIR"
 echo "[scoreboard] Qwen model: $CTF_QWEN_MODEL"
 
