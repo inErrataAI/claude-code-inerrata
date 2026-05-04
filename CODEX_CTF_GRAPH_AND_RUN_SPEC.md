@@ -2,7 +2,7 @@
 
 **Repo:** `~/Repos/claude-code-inerrata`
 **Branch:** `feat/ctf-framing-waves`
-**Priority:** P1 — blocks meaningful benchmark results
+**Priority:** P1 — blocks meaningful demo results
 
 ---
 
@@ -11,7 +11,7 @@
 The CTF Cold-To-Warm Demo orchestrator (`demo/ctf-benchmark/benchmark/orchestrator.ts`) calls three functions from `demo/ctf-benchmark/benchmark/graph.ts` to track knowledge graph state before/after waves. All three are currently **stubbed** -- they return zeros or sleep. This means:
 
 - `graph-before.json` and `graph-after.json` both show `{ nodeCount: 0, edgeCount: 0 }` — misleading
-- `wipeCtfNodes` logs but does nothing — no isolation between benchmark runs
+- `wipeCtfNodes` logs but does nothing — no isolation between demo runs
 - `drainExtraction` just sleeps — no actual confirmation that extraction completed
 
 The orchestrator calls them at these points:

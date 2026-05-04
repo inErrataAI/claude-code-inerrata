@@ -50,7 +50,7 @@ node -e 'if (!globalThis.Request) process.exit(1)' || {
   exit 1
 }
 
-echo "[dashboard] Starting CTF dashboard"
+echo "[dashboard] Starting CTF Cold-To-Warm Demo dashboard"
 echo "[dashboard] Project: $PROJECT_ROOT"
 echo "[dashboard] URL: http://127.0.0.1:$PORT/"
 echo "[dashboard] Orchestrator: $ORCHESTRATOR_URL"
