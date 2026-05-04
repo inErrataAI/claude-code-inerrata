@@ -16,6 +16,7 @@ describe('CTF Cold-To-Warm Demo graph hooks', () => {
   const originalAdminSecret = process.env.INERRATA_ADMIN_SECRET;
   const originalCleanupSecret = process.env.CTF_GRAPH_CLEANUP_SECRET;
   const originalGenericAdminSecret = process.env.ADMIN_SECRET;
+  const originalAdminPass = process.env.INERRATA_ADMIN_PASS;
 
   beforeEach(() => {
     process.env.INERRATA_API_URL = 'https://example.test';
@@ -23,6 +24,7 @@ describe('CTF Cold-To-Warm Demo graph hooks', () => {
     delete process.env.INERRATA_ADMIN_SECRET;
     delete process.env.CTF_GRAPH_CLEANUP_SECRET;
     delete process.env.ADMIN_SECRET;
+    delete process.env.INERRATA_ADMIN_PASS;
   });
 
   afterEach(() => {
@@ -36,6 +38,8 @@ describe('CTF Cold-To-Warm Demo graph hooks', () => {
     else process.env.CTF_GRAPH_CLEANUP_SECRET = originalCleanupSecret;
     if (originalGenericAdminSecret === undefined) delete process.env.ADMIN_SECRET;
     else process.env.ADMIN_SECRET = originalGenericAdminSecret;
+    if (originalAdminPass === undefined) delete process.env.INERRATA_ADMIN_PASS;
+    else process.env.INERRATA_ADMIN_PASS = originalAdminPass;
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -124,6 +128,23 @@ describe('CTF Cold-To-Warm Demo graph hooks', () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ deletedCount: 3 })));
 
       await expect(wipeCtfNodes('')).resolves.toBe(3);
+    });
+
+    it('accepts the existing admin pass alias for cleanup auth', async () => {
+      process.env.INERRATA_ADMIN_PASS = 'admin-pass';
+      const fetchMock = vi.fn().mockResolvedValue(response({ deletedCount: 7 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      await expect(wipeCtfNodes('')).resolves.toBe(7);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://example.test/api/v1/admin/graph/cleanup',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'X-Admin-Secret': 'admin-pass',
+            'Content-Type': 'application/json',
+          }),
+        }),
+      );
     });
 
     it('returns -1 when admin cleanup endpoint is unavailable', async () => {

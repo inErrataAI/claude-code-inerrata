@@ -64,7 +64,7 @@ if ! load_inerrata_key; then
   exit 1
 fi
 
-load_env_var INERRATA_ADMIN_SECRET || load_env_var CTF_GRAPH_CLEANUP_SECRET || load_env_var ADMIN_SECRET || true
+load_env_var INERRATA_ADMIN_SECRET || load_env_var CTF_GRAPH_CLEANUP_SECRET || load_env_var ADMIN_SECRET || load_env_var INERRATA_ADMIN_PASS || true
 load_env_var INERRATA_API_URL || true
 
 export CTF_QWEN_MODEL
@@ -107,7 +107,7 @@ echo "[scoreboard] Parallel: $PARALLEL"
 echo "[scoreboard] Max output tokens: $MAX_OUTPUT_TOKENS"
 echo "[scoreboard] Results: $RESULTS_DIR"
 echo "[scoreboard] Qwen model: $CTF_QWEN_MODEL"
-echo "[scoreboard] Graph cleanup auth: $([[ -n "${INERRATA_ADMIN_SECRET:-}${CTF_GRAPH_CLEANUP_SECRET:-}${ADMIN_SECRET:-}" ]] && echo enabled || echo missing)"
+echo "[scoreboard] Graph cleanup auth: $([[ -n "${INERRATA_ADMIN_SECRET:-}${CTF_GRAPH_CLEANUP_SECRET:-}${ADMIN_SECRET:-}${INERRATA_ADMIN_PASS:-}" ]] && echo enabled || echo missing)"
 
 cd "$PROJECT_ROOT"
 exec npx tsx "${args[@]}"
