@@ -1,23 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
+  artifactChallengeId,
   buildAgentSandbox,
   buildClaudeArgs,
   parseConfig,
   parseFindings,
   parseStreamJson,
+  prepareColdSourceWorkspace,
+  runDisqualificationReasons,
   runChallengesWithSequentialAgents,
   runWithConcurrency,
 } from '../benchmark/orchestrator.js';
 import { CHALLENGES } from '../challenges/registry.js';
 import { SCORING_CHALLENGES } from '../challenges/registry.private.js';
+import { opaqueChallengeId } from '../shared/challenge-view.js';
+import type { Challenge, WaveConfig } from '../shared/types.js';
 
 describe('CTF Cold-To-Warm Demo orchestrator config', () => {
   it('parses --parallel', () => {
     expect(parseConfig(['--parallel', '7']).parallel).toBe(7);
+  });
+
+  it('parses --max-tool-calls', () => {
+    expect(parseConfig(['--max-tool-calls', '12']).maxToolCalls).toBe(12);
   });
 
   it('rejects invalid --parallel values', () => {
@@ -34,6 +43,8 @@ describe('CTF Cold-To-Warm Demo orchestrator config', () => {
     });
 
     expect(args).toContain('--strict-mcp-config');
+    expect(args.slice(args.indexOf('--max-turns'), args.indexOf('--max-turns') + 2))
+      .toEqual(['--max-turns', '35']);
     expect(args.slice(args.indexOf('--setting-sources'), args.indexOf('--setting-sources') + 2))
       .toEqual(['--setting-sources', 'project,local']);
     expect(args).not.toContain('--plugin-dir');
@@ -49,9 +60,118 @@ describe('CTF Cold-To-Warm Demo orchestrator config', () => {
     expect(sandbox.enabled).toBe(true);
     expect(sandbox.command).toBe('bwrap');
     expect(sandbox.args).toContain('--tmpfs');
-    expect(sandbox.args.join(' ')).toContain('demo/ctf-benchmark');
+    expect(
+      sandbox.args.join(' ').includes('demo/ctf-benchmark')
+      || (process.env.HOME ? sandbox.args.join(' ').includes(`${process.env.HOME}/Repos`) : false),
+    ).toBe(true);
     expect(sandbox.args).toContain('/tmp/ctf-workspace');
     expect(sandbox.mcpConfigPath).toBe('/tmp/ctf-mcp-config.json');
+    if (process.env.HOME) {
+      const homeBindIndex = sandbox.args.findIndex((arg, index) =>
+        arg === '--bind'
+        && sandbox.args[index + 1] === process.env.HOME
+        && sandbox.args[index + 2] === process.env.HOME,
+      );
+      expect(homeBindIndex).toBe(-1);
+      expect(sandbox.args.join(' ')).toContain(`${process.env.HOME}/Repos`);
+    }
+  });
+
+  it('prepares cold source workspaces without git history or advisory files', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'ctf-cold-source-'));
+    const baseRepo = join(tmp, 'repo');
+    mkdirSync(join(baseRepo, 'src'), { recursive: true });
+    mkdirSync(join(baseRepo, '.github'), { recursive: true });
+    writeFileSync(join(baseRepo, 'src', 'vuln.c'), 'int vuln(void) { return 0; }\n');
+    writeFileSync(join(baseRepo, 'NEWS'), 'CVE-shaped release notes\n');
+    writeFileSync(join(baseRepo, 'ChangeLog'), 'security fix history\n');
+    writeFileSync(join(baseRepo, '.github', 'advisory.yml'), 'private advisory\n');
+
+    try {
+      execFileSync('git', ['init', baseRepo], { stdio: 'pipe' });
+      execFileSync('git', ['-C', baseRepo, 'add', '.'], { stdio: 'pipe' });
+      execFileSync('git', [
+        '-C', baseRepo,
+        '-c', 'user.email=test@example.com',
+        '-c', 'user.name=Test',
+        'commit', '-m', 'initial',
+      ], { stdio: 'pipe' });
+      execFileSync('git', ['-C', baseRepo, 'tag', 'snapshot'], { stdio: 'pipe' });
+
+      const challenge: Challenge = {
+        ...CHALLENGES[0],
+        repo: 'testrepo',
+        affectedVersion: 'snapshot',
+      };
+      const coldPath = prepareColdSourceWorkspace({
+        baseRepoPath: baseRepo,
+        reposDir: join(tmp, 'repos'),
+        agentId: 'cold-agent',
+        challenge,
+      });
+
+      expect(existsSync(join(coldPath, 'src', 'vuln.c'))).toBe(true);
+      expect(existsSync(join(coldPath, '.git'))).toBe(false);
+      expect(existsSync(join(coldPath, 'NEWS'))).toBe(false);
+      expect(existsSync(join(coldPath, 'ChangeLog'))).toBe(false);
+      expect(existsSync(join(coldPath, '.github'))).toBe(false);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('uses opaque challenge ids for cold artifacts', () => {
+    const challenge = CHALLENGES[0];
+    const coldWave: WaveConfig = {
+      number: 1,
+      label: 'cold',
+      model: 'haiku',
+      modelId: 'haiku',
+      runtime: 'claude',
+      auth: 'none',
+      graphState: 'empty',
+      canContribute: false,
+      spriteType: 'rogue',
+      description: 'cold wave',
+    };
+    const warmWave: WaveConfig = { ...coldWave, auth: 'anonymous' };
+
+    expect(artifactChallengeId(challenge, coldWave)).toBe(opaqueChallengeId(challenge));
+    expect(artifactChallengeId(challenge, coldWave)).not.toContain('CVE');
+    expect(artifactChallengeId(challenge, coldWave)).not.toContain(challenge.repo);
+    expect(artifactChallengeId(challenge, warmWave)).toBe(challenge.id);
+  });
+
+  it('disqualifies cold runs for over-budget or external lookup tool use', () => {
+    const coldWave: WaveConfig = {
+      number: 1,
+      label: 'cold',
+      model: 'haiku',
+      modelId: 'haiku',
+      runtime: 'claude',
+      auth: 'none',
+      graphState: 'empty',
+      canContribute: false,
+      spriteType: 'rogue',
+      description: 'cold wave',
+    };
+
+    expect(runDisqualificationReasons({
+      toolCalls: Array.from({ length: 13 }, () => 'Bash'),
+      classified: { graphHits: 0 },
+      wave: coldWave,
+      maxToolCalls: 12,
+    })).toContain('tool-budget-exceeded:13/12');
+
+    expect(runDisqualificationReasons({
+      toolCalls: ['WebSearch'],
+      classified: { graphHits: 1 },
+      wave: coldWave,
+      maxToolCalls: 12,
+    })).toEqual([
+      'graph-tool-used-in-cold-wave',
+      'external-lookup-tool-used-in-cold-wave',
+    ]);
   });
 
   it('sandbox exposes only the challenge workspace from the demo tree', () => {
@@ -142,13 +262,13 @@ describe('CTF Cold-To-Warm Demo orchestrator config', () => {
     expect(findings[0].bugClass).toBe(challenge.bugClass);
   });
 
-  it('maps hidden cold challenge token to the active challenge id', () => {
+  it('maps hidden cold challenge tokens to the active challenge id', () => {
     const challenge = CHALLENGES[0];
     const scoringChallenge = SCORING_CHALLENGES[0];
     const findings = parseFindings(
       `<finding>
 {
-  "challengeId": "current",
+  "challengeId": "${opaqueChallengeId(challenge)}",
   "vulnerableFile": "${scoringChallenge.groundTruth.files[0]}",
   "vulnerableFunction": "${scoringChallenge.groundTruth.functions[0]}",
   "lineRange": [1, 2],

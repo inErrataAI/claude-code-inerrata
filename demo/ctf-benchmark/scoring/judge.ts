@@ -11,9 +11,11 @@
  *   - Cross-repo   (10%): CWE/abstract class ref + other software ref + general mitigation
  */
 
-import type { Finding, ScoredFinding, ScoringChallenge } from '../shared/types.js';
+import type { Finding, FindingDiagnostics, ScoredFinding, ScoringChallenge } from '../shared/types.js';
 import { getScoringChallengeById } from '../challenges/registry.private.js';
 import { basename } from 'path';
+
+const EMPTY_SCORES = { location: 0, explanation: 0, poc: 0, patch: 0, crossRepo: 0, total: 0 };
 
 // ---------------------------------------------------------------------------
 // Keyword extraction
@@ -55,6 +57,96 @@ function normalizedOverlap(a: Set<string>, b: Set<string>): number {
   }
   const minSize = Math.min(a.size, b.size);
   return minSize > 0 ? intersection / minSize : 0;
+}
+
+function allFindingText(finding: Finding): string {
+  return [
+    finding.explanation,
+    finding.pocCode,
+    finding.patchSuggestion,
+    finding.crossRepoPattern,
+    finding.bugClass,
+  ].filter(Boolean).join('\n');
+}
+
+function extractCveMentions(text: string): string[] {
+  const mentions = text.match(/CVE-\d{4}-\d{4,7}/gi) ?? [];
+  return [...new Set(mentions.map(cve => cve.toUpperCase()))];
+}
+
+function exactFunctionMatch(finding: Finding, challenge: ScoringChallenge): boolean {
+  if (!finding.vulnerableFunction) return false;
+  return challenge.groundTruth.functions.some(
+    fn => fn.toLowerCase() === finding.vulnerableFunction!.toLowerCase(),
+  );
+}
+
+function bugClassMatch(finding: Finding, challenge: ScoringChallenge): boolean {
+  return finding.bugClass.toLowerCase() === challenge.bugClass.toLowerCase();
+}
+
+function evidenceHits(finding: Finding, challenge: ScoringChallenge): string[] {
+  const text = allFindingText(finding).toLowerCase();
+  const hits: string[] = [];
+
+  const candidates = [
+    challenge.groundTruth.cweId,
+    ...challenge.groundTruth.callChain,
+    ...challenge.groundTruth.files.map(file => basename(file)),
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = candidate.toLowerCase();
+    if (normalized.length >= 3 && text.includes(normalized)) {
+      hits.push(candidate);
+    }
+  }
+
+  const exploitKeywords = [...extractKeywords(challenge.groundTruth.exploitVector)]
+    .filter(word => word.length >= 5)
+    .slice(0, 12);
+  for (const keyword of exploitKeywords) {
+    if (text.includes(keyword)) hits.push(keyword);
+  }
+
+  return [...new Set(hits)];
+}
+
+function diagnosticsFor(finding: Finding, challenge: ScoringChallenge | undefined): FindingDiagnostics {
+  if (!challenge) {
+    return {
+      exactFunctionMatch: false,
+      bugClassMatch: false,
+      wrongCveMentions: [],
+      evidenceHits: [],
+    };
+  }
+
+  const expectedCve = challenge.cve.toUpperCase();
+  const wrongCveMentions = extractCveMentions(allFindingText(finding))
+    .filter(cve => cve !== expectedCve);
+
+  return {
+    exactFunctionMatch: exactFunctionMatch(finding, challenge),
+    bugClassMatch: bugClassMatch(finding, challenge),
+    wrongCveMentions,
+    evidenceHits: evidenceHits(finding, challenge),
+  };
+}
+
+function zeroScoredFinding(
+  finding: Finding,
+  diagnostics: FindingDiagnostics,
+  disqualificationReasons: string[] = [],
+): ScoredFinding {
+  return {
+    ...finding,
+    scores: { ...EMPTY_SCORES },
+    solved: false,
+    disqualified: disqualificationReasons.length > 0,
+    disqualificationReasons,
+    diagnostics,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -343,12 +435,18 @@ function scoreCrossRepo(finding: Finding, challenge: ScoringChallenge): number {
  */
 export function scoreFinding(finding: Finding): ScoredFinding {
   const challenge = getScoringChallengeById(finding.challengeId);
+  const diagnostics = diagnosticsFor(finding, challenge);
 
   if (!challenge) {
-    return {
-      ...finding,
-      scores: { location: 0, explanation: 0, poc: 0, patch: 0, crossRepo: 0, total: 0 },
-    };
+    return zeroScoredFinding(finding, diagnostics);
+  }
+
+  if (diagnostics.wrongCveMentions.length > 0) {
+    return zeroScoredFinding(
+      finding,
+      diagnostics,
+      diagnostics.wrongCveMentions.map(cve => `wrong-cve-mention:${cve}`),
+    );
   }
 
   const maxPoints = challenge.points;
@@ -356,10 +454,7 @@ export function scoreFinding(finding: Finding): ScoredFinding {
   // Compute fractional scores (0-1)
   const locFrac = scoreLocation(finding, challenge);
   if (locFrac === 0) {
-    return {
-      ...finding,
-      scores: { location: 0, explanation: 0, poc: 0, patch: 0, crossRepo: 0, total: 0 },
-    };
+    return zeroScoredFinding(finding, diagnostics);
   }
 
   const explFrac = scoreExplanation(finding, challenge);
@@ -374,10 +469,18 @@ export function scoreFinding(finding: Finding): ScoredFinding {
   const patch       = Math.round(patchFrac * 0.20 * maxPoints);
   const crossRepo   = Math.round(crossFrac * 0.10 * maxPoints);
   const total = location + explanation + poc + patch + crossRepo;
-
-  return {
+  const scored: ScoredFinding = {
     ...finding,
     scores: { location, explanation, poc, patch, crossRepo, total },
+    solved: false,
+    disqualified: false,
+    disqualificationReasons: [],
+    diagnostics,
+  };
+
+  return {
+    ...scored,
+    solved: isSolved(scored),
   };
 }
 
@@ -402,15 +505,25 @@ export function scoreAllFindings(findings: Finding[]): ScoredFinding[] {
 
 /**
  * Determine if a scored finding counts as "solved" (minimum viable finding).
- * Requires: location >= 60% of location allocation AND explanation >= 40% of explanation allocation.
+ *
+ * A flag requires more than a plausible file-level hit: the answer must name
+ * the exact vulnerable function, match the expected bug class, include some
+ * ground-truth-specific evidence, avoid wrong CVE/advisory names, and clear a
+ * higher explanation threshold. Partial points can still be awarded below this
+ * bar, but not flags.
  */
 export function isSolved(sf: ScoredFinding): boolean {
   const challenge = getScoringChallengeById(sf.challengeId);
   if (!challenge) return false;
+  if (sf.disqualified) return false;
+  if (!sf.diagnostics.exactFunctionMatch) return false;
+  if (!sf.diagnostics.bugClassMatch) return false;
+  if (sf.diagnostics.wrongCveMentions.length > 0) return false;
+  if (sf.diagnostics.evidenceHits.length === 0) return false;
 
   const maxPoints = challenge.points;
-  const locationThreshold = 0.60 * 0.15 * maxPoints; // 60% of location allocation
-  const explanationThreshold = 0.40 * 0.25 * maxPoints; // 40% of explanation allocation
+  const locationThreshold = 0.95 * 0.15 * maxPoints; // exact file + function
+  const explanationThreshold = 0.55 * 0.25 * maxPoints;
 
   return sf.scores.location >= locationThreshold && sf.scores.explanation >= explanationThreshold;
 }

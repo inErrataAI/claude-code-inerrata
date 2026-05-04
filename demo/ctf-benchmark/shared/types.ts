@@ -138,6 +138,13 @@ export interface Finding {
   crossRepoPattern?: string;
 }
 
+export interface FindingDiagnostics {
+  exactFunctionMatch: boolean;
+  bugClassMatch: boolean;
+  wrongCveMentions: string[];
+  evidenceHits: string[];
+}
+
 export interface ScoredFinding extends Finding {
   scores: {
     location: number;
@@ -147,6 +154,10 @@ export interface ScoredFinding extends Finding {
     crossRepo: number;
     total: number;
   };
+  solved: boolean;
+  disqualified: boolean;
+  disqualificationReasons: string[];
+  diagnostics: FindingDiagnostics;
 }
 
 // ---------------------------------------------------------------------------
@@ -188,6 +199,8 @@ export interface AgentState {
   toolCalls: number;
   graphHits: number;
   findings: ScoredFinding[];
+  budgetExceeded?: boolean;
+  disqualifications?: string[];
   wave: number;
 }
 

@@ -11,9 +11,9 @@
  */
 import { parseArgs } from 'util';
 import { randomUUID, randomBytes } from 'crypto';
-import { resolve, dirname } from 'path';
+import { resolve, dirname, relative } from 'path';
 import { fileURLToPath } from 'url';
-import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { writeFileSync, mkdirSync, existsSync, readdirSync, rmSync } from 'fs';
 import { spawn, execSync, execFileSync, exec, type ChildProcess, type SpawnOptions } from 'child_process';
 import { promisify } from 'util';
 import { Hono } from 'hono';
@@ -35,6 +35,7 @@ import type {
   WaveConfig,
 } from '../shared/types.js';
 import { buildSystemPrompt, buildChallengePrompt } from '../agents/prompts.js';
+import { challengeForAuth, opaqueChallengeId } from '../shared/challenge-view.js';
 import { CHALLENGES, REPOS } from '../challenges/registry.js';
 import { scoreAllFindings, isSolved } from '../scoring/judge.js';
 import { buildMcpConfig } from './mcp-config.js';
@@ -57,6 +58,7 @@ export interface BenchmarkConfig {
   resultsDir: string;
   reposDir: string;
   timeoutMinutes: number;
+  maxToolCalls: number;
   agentsPerWave: number;
   parallel: number;
   sandboxAgents: boolean;
@@ -73,6 +75,7 @@ export function parseConfig(argv: string[] = process.argv.slice(2)): BenchmarkCo
       'results-dir': { type: 'string', default: resolve(PROJECT_ROOT, 'results') },
       'repos-dir': { type: 'string', default: resolve(PROJECT_ROOT, 'repos') },
       timeout: { type: 'string', default: '30' },
+      'max-tool-calls': { type: 'string', default: '35' },
       'agents-per-wave': { type: 'string', default: '4' },
       parallel: { type: 'string', default: '4' },
       'no-sandbox': { type: 'boolean', default: false },
@@ -103,12 +106,18 @@ export function parseConfig(argv: string[] = process.argv.slice(2)): BenchmarkCo
     throw new Error(`Invalid --parallel: ${values.parallel}. Must be >= 1.`);
   }
 
+  const maxToolCalls = parseInt(values['max-tool-calls']!, 10);
+  if (!Number.isFinite(maxToolCalls) || maxToolCalls < 1) {
+    throw new Error(`Invalid --max-tool-calls: ${values['max-tool-calls']}. Must be >= 1.`);
+  }
+
   return {
     framing,
     port: parseInt(values.port!, 10),
     resultsDir: values['results-dir']!,
     reposDir: values['repos-dir']!,
     timeoutMinutes: parseInt(values.timeout!, 10),
+    maxToolCalls,
     agentsPerWave,
     parallel,
     sandboxAgents: !values['no-sandbox'] && process.env.CTF_AGENT_SANDBOX !== '0',
@@ -179,13 +188,66 @@ function resetDashboardState(framing?: BenchmarkFraming) {
   flags.length = 0;
 }
 
-function buildDashboardState(): DashboardState {
+function currentAuthForDashboard(): WaveConfig['auth'] | undefined {
+  return waves.length > 0 ? waves[waves.length - 1].auth : undefined;
+}
+
+function displayChallengeId(challengeId: string, auth: WaveConfig['auth'] | undefined): string {
+  if (auth !== 'none') return challengeId;
+  const challenge = activeChallenges.find(c => c.id === challengeId);
+  return challenge ? opaqueChallengeId(challenge) : opaqueChallengeId(challengeId);
+}
+
+function displayAgentState(state: AgentState, auth: WaveConfig['auth'] | undefined): AgentState {
+  if (auth !== 'none') return state;
+
   return {
-    agents: { ...agentStates },
-    challenges: activeChallenges,
-    waves: [...waves],
+    ...state,
+    currentChallenge: state.currentChallenge
+      ? displayChallengeId(state.currentChallenge, auth)
+      : undefined,
+    findings: state.findings.map(finding => ({
+      ...finding,
+      challengeId: displayChallengeId(finding.challengeId, auth),
+    })),
+  };
+}
+
+function displayWave(wave: Wave, auth: WaveConfig['auth'] | undefined): Wave {
+  if (auth !== 'none' || wave.auth !== 'none') return wave;
+
+  return {
+    ...wave,
+    challenges: wave.challenges.map(challengeId => displayChallengeId(challengeId, auth)),
+    scores: Object.fromEntries(
+      Object.entries(wave.scores).map(([agentId, scores]) => [
+        agentId,
+        Object.fromEntries(
+          Object.entries(scores).map(([challengeId, score]) => [
+            displayChallengeId(challengeId, auth),
+            score,
+          ]),
+        ),
+      ]),
+    ),
+  };
+}
+
+function buildDashboardState(): DashboardState {
+  const dashboardAuth = currentAuthForDashboard();
+  return {
+    agents: Object.fromEntries(
+      Object.entries(agentStates).map(([agentId, state]) => [
+        agentId,
+        displayAgentState(state, dashboardAuth),
+      ]),
+    ),
+    challenges: activeChallenges.map(challenge => challengeForAuth(challenge, dashboardAuth)),
+    waves: waves.map(wave => displayWave(wave, dashboardAuth)),
     currentWave: waves.length > 0 ? waves[waves.length - 1].number : 0,
-    flags: [...flags],
+    flags: flags.map(flag => dashboardAuth === 'none'
+      ? { ...flag, challengeId: displayChallengeId(flag.challengeId, dashboardAuth) }
+      : flag),
     runId: runId.slice(0, 8),
     framing: activeFraming,
   };
@@ -299,6 +361,7 @@ export function buildClaudeArgs(opts: {
   mcpConfigPath: string;
   systemPrompt: string;
   challengePrompt: string;
+  maxTurns?: number;
 }): string[] {
   return [
     '--print',
@@ -309,7 +372,7 @@ export function buildClaudeArgs(opts: {
     '--dangerously-skip-permissions',
     '--setting-sources', 'project,local',
     '--strict-mcp-config',
-    '--max-turns', '35',
+    '--max-turns', String(opts.maxTurns ?? 35),
     '--mcp-config', opts.mcpConfigPath,
     '--system-prompt', opts.systemPrompt,
     '-p', opts.challengePrompt,
@@ -355,12 +418,25 @@ export function buildAgentSandbox(opts: {
     '--ro-bind', opts.mcpConfigPath, SANDBOX_MCP_CONFIG,
   ];
 
+  let projectRootMasked = false;
   if (process.env.HOME) {
-    args.push('--bind', process.env.HOME, process.env.HOME);
+    const home = process.env.HOME;
+    const hiddenHomePaths = ['Repos', '.openclaw', '.inerrata', '.codex'];
+    for (const hidden of hiddenHomePaths) {
+      const hiddenPath = resolve(home, hidden);
+      if (!existsSync(hiddenPath)) continue;
+      args.push('--tmpfs', hiddenPath);
+      if (PROJECT_ROOT === hiddenPath || PROJECT_ROOT.startsWith(`${hiddenPath}/`)) {
+        projectRootMasked = true;
+      }
+    }
+  }
+
+  if (!projectRootMasked) {
+    args.push('--tmpfs', PROJECT_ROOT);
   }
 
   args.push(
-    '--tmpfs', PROJECT_ROOT,
     '--setenv', 'CTF_AGENT_SANDBOX', '1',
     '--chdir', SANDBOX_WORKSPACE,
   );
@@ -382,6 +458,7 @@ function spawnAuditAgent(opts: {
   repoPath: string;
   mcpConfigPath: string;
   sandboxAgents: boolean;
+  maxToolCalls: number;
 }): ChildProcess {
   const sandbox = buildAgentSandbox({
     enabled: opts.sandboxAgents,
@@ -394,6 +471,7 @@ function spawnAuditAgent(opts: {
     mcpConfigPath: sandbox.mcpConfigPath,
     systemPrompt: opts.systemPrompt,
     challengePrompt: opts.challengePrompt,
+    maxTurns: opts.maxToolCalls,
   });
   const spawnOptions: SpawnOptions = {
     cwd: sandbox.cwd,
@@ -574,7 +652,10 @@ export function parseFindings(output: string, agentId: string, challenge?: Chall
     const normalized = value.trim().toLowerCase();
     if (
       challenge &&
-      ['current', 'current_challenge', 'current-challenge', 'the-challenge-id'].includes(normalized)
+      (
+        ['current', 'current_challenge', 'current-challenge', 'the-challenge-id'].includes(normalized)
+        || normalized === opaqueChallengeId(challenge).toLowerCase()
+      )
     ) {
       return challenge.id;
     }
@@ -701,6 +782,50 @@ function classifyToolCalls(toolCalls: string[]): { graphQueries: number; graphCo
   };
 }
 
+export function artifactChallengeId(challenge: Challenge, wave: WaveConfig): string {
+  return wave.auth === 'none' ? opaqueChallengeId(challenge) : challenge.id;
+}
+
+function isExternalLookupTool(toolName: string): boolean {
+  const normalized = toolName.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  return normalized === 'websearch' || normalized === 'webfetch';
+}
+
+export function runDisqualificationReasons(opts: {
+  toolCalls: string[];
+  classified: { graphHits: number };
+  wave: WaveConfig;
+  maxToolCalls: number;
+}): string[] {
+  const reasons: string[] = [];
+
+  if (opts.toolCalls.length > opts.maxToolCalls) {
+    reasons.push(`tool-budget-exceeded:${opts.toolCalls.length}/${opts.maxToolCalls}`);
+  }
+
+  if (opts.wave.auth === 'none' && opts.classified.graphHits > 0) {
+    reasons.push('graph-tool-used-in-cold-wave');
+  }
+
+  if (opts.wave.auth === 'none' && opts.toolCalls.some(isExternalLookupTool)) {
+    reasons.push('external-lookup-tool-used-in-cold-wave');
+  }
+
+  return reasons;
+}
+
+function applyRunDisqualification(finding: ScoredFinding, reasons: string[]): ScoredFinding {
+  if (reasons.length === 0) return finding;
+
+  return {
+    ...finding,
+    scores: { location: 0, explanation: 0, poc: 0, patch: 0, crossRepo: 0, total: 0 },
+    solved: false,
+    disqualified: true,
+    disqualificationReasons: [...new Set([...finding.disqualificationReasons, ...reasons])],
+  };
+}
+
 async function runAgentForChallenge(opts: {
   agent: AgentConfig;
   wave: WaveConfig;
@@ -713,18 +838,21 @@ async function runAgentForChallenge(opts: {
   const { agent, wave, challenge, repoPath, config, framingResultsDir } = opts;
   const agentState = ensureAgentState(agent, wave, challenge);
   const startTime = Date.now();
+  const agentWave = waveForAgent(wave, agent);
+  const publicChallengeId = artifactChallengeId(challenge, agentWave);
 
   broadcastSSE('agent_challenge_start', {
     agentId: agent.id,
-    challengeId: challenge.id,
+    challengeId: publicChallengeId,
     model: agent.model,
     auth: agent.auth,
     wave: wave.number,
     label: wave.label,
   });
 
-  checkoutVersion(repoPath, challenge.affectedVersion);
-  const agentWave = waveForAgent(wave, agent);
+  if (existsSync(resolve(repoPath, '.git'))) {
+    checkoutVersion(repoPath, challenge.affectedVersion);
+  }
 
   const child = spawnAuditAgent({
     agent,
@@ -734,13 +862,13 @@ async function runAgentForChallenge(opts: {
     repoPath,
     mcpConfigPath: opts.mcpConfigPath,
     sandboxAgents: config.sandboxAgents,
+    maxToolCalls: config.maxToolCalls,
   });
 
   child.stderr?.on('data', (chunk: Buffer) => {
     const text = chunk.toString().trim();
     if (!text) return;
-    agentState.toolCalls++;
-    broadcastSSE('tool_call', { agentId: agent.id, tool: 'audit', challengeId: challenge.id });
+    broadcastSSE('tool_call', { agentId: agent.id, tool: 'audit', challengeId: publicChallengeId });
   });
 
   const { stdout, stderr, exitCode } = await collectProcessOutput(child, config.timeoutMinutes * 60_000);
@@ -748,23 +876,39 @@ async function runAgentForChallenge(opts: {
   console.log(`[agent:${agent.name}] ${challenge.id} finished exit=${exitCode} in ${elapsed}s`);
   if (stderr.trim()) console.warn(`[agent:${agent.name}] stderr: ${stderr.trim().slice(0, 500)}`);
 
-  writeFileSync(resolve(framingResultsDir, `${agent.id}-${challenge.id}.ndjson`), stdout);
+  writeFileSync(resolve(framingResultsDir, `${agent.id}-${publicChallengeId}.ndjson`), stdout);
 
   const parsed = parseStreamJson(stdout);
-  writeFileSync(resolve(framingResultsDir, `${agent.id}-${challenge.id}.txt`), parsed.text);
+  writeFileSync(resolve(framingResultsDir, `${agent.id}-${publicChallengeId}.txt`), parsed.text);
 
   const classified = classifyToolCalls(parsed.toolCalls);
   agentState.toolCalls += parsed.toolCalls.length;
   agentState.graphHits += classified.graphHits;
+  const runDisqualifications = runDisqualificationReasons({
+    toolCalls: parsed.toolCalls,
+    classified,
+    wave: agentWave,
+    maxToolCalls: config.maxToolCalls,
+  });
+  if (runDisqualifications.length > 0) {
+    agentState.disqualifications = [
+      ...new Set([...(agentState.disqualifications ?? []), ...runDisqualifications]),
+    ];
+    if (runDisqualifications.some(reason => reason.startsWith('tool-budget-exceeded'))) {
+      agentState.budgetExceeded = true;
+      agentState.status = 'throttled';
+    }
+  }
 
   for (const toolName of parsed.toolCalls) {
     if (toolName.includes('inerrata')) {
-      broadcastSSE('graph_hit', { agentId: agent.id, challengeId: challenge.id, tool: toolName });
+      broadcastSSE('graph_hit', { agentId: agent.id, challengeId: publicChallengeId, tool: toolName });
     }
   }
 
   const rawFindings = parseFindings(parsed.text, agent.id, challenge);
-  const scoredFindings = scoreAllFindings(rawFindings);
+  const scoredFindings = scoreAllFindings(rawFindings)
+    .map(finding => applyRunDisqualification(finding, runDisqualifications));
 
   for (const finding of scoredFindings) {
     agentState.findings.push(finding);
@@ -781,7 +925,10 @@ async function runAgentForChallenge(opts: {
         waveLabel: wave.label,
       };
       flags.push(flagEvent);
-      broadcastSSE('flag_captured', flagEvent);
+      broadcastSSE(
+        'flag_captured',
+        wave.auth === 'none' ? { ...flagEvent, challengeId: publicChallengeId } : flagEvent,
+      );
     }
   }
 
@@ -813,7 +960,102 @@ function safePathSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
-function ensureAgentRepo(baseRepoPath: string, reposDir: string, agentId: string, repoName: string): string {
+function shouldScrubColdPath(relativePath: string, basenameValue: string): boolean {
+  const rel = relativePath.toLowerCase();
+  const base = basenameValue.toLowerCase();
+
+  if (base === '.git' || base === '.github' || base === '.gitlab') return true;
+  if (base === 'news' || base.startsWith('news.')) return true;
+  if (base === 'changelog' || base.startsWith('changelog')) return true;
+  if (base === 'changes' || base.startsWith('changes.')) return true;
+  if (base.startsWith('security') || base.startsWith('advisory')) return true;
+  if (base.includes('cve')) return true;
+  if (rel === 'debian/changelog' || rel.startsWith('debian/patches/')) return true;
+  if (rel.startsWith('rpm/') || rel.startsWith('patches/')) return true;
+
+  return false;
+}
+
+export function scrubColdSourceWorkspace(repoPath: string): void {
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = resolve(dir, entry.name);
+      const relPath = relative(repoPath, fullPath);
+
+      if (shouldScrubColdPath(relPath, entry.name)) {
+        rmSync(fullPath, { recursive: true, force: true });
+        continue;
+      }
+
+      if (entry.isDirectory()) walk(fullPath);
+    }
+  };
+
+  walk(repoPath);
+}
+
+export function prepareColdSourceWorkspace(opts: {
+  baseRepoPath: string;
+  reposDir: string;
+  agentId: string;
+  challenge: Challenge;
+}): string {
+  const repoPath = resolve(
+    opts.reposDir,
+    '_cold_agents',
+    safePathSegment(opts.agentId),
+    `${safePathSegment(opts.challenge.repo)}-${opaqueChallengeId(opts.challenge)}`,
+  );
+  const archivePath = resolve(
+    opts.reposDir,
+    '_archives',
+    `${safePathSegment(opts.agentId)}-${opaqueChallengeId(opts.challenge)}.tar`,
+  );
+
+  rmSync(repoPath, { recursive: true, force: true });
+  mkdirSync(repoPath, { recursive: true });
+  mkdirSync(dirname(archivePath), { recursive: true });
+
+  checkoutVersion(opts.baseRepoPath, opts.challenge.affectedVersion);
+  execFileSync('git', [
+    '-C',
+    opts.baseRepoPath,
+    'archive',
+    '--format=tar',
+    '--output',
+    archivePath,
+    opts.challenge.affectedVersion,
+  ], {
+    stdio: 'pipe',
+    timeout: 120_000,
+  });
+  execFileSync('tar', ['-xf', archivePath, '-C', repoPath], {
+    stdio: 'pipe',
+    timeout: 120_000,
+  });
+  rmSync(archivePath, { force: true });
+
+  scrubColdSourceWorkspace(repoPath);
+  return repoPath;
+}
+
+function ensureAgentRepo(
+  baseRepoPath: string,
+  reposDir: string,
+  agentId: string,
+  repoName: string,
+  challenge: Challenge,
+  wave: WaveConfig,
+): string {
+  if (wave.auth === 'none') {
+    return prepareColdSourceWorkspace({
+      baseRepoPath,
+      reposDir,
+      agentId,
+      challenge,
+    });
+  }
+
   const repoPath = resolve(reposDir, '_agents', safePathSegment(agentId), safePathSegment(repoName));
   if (existsSync(resolve(repoPath, '.git'))) return repoPath;
 
@@ -948,7 +1190,7 @@ async function runWave(opts: {
         continue;
       }
 
-      const agentRepoPath = ensureAgentRepo(repoPath, config.reposDir, agent.id, challenge.repo);
+      const agentRepoPath = ensureAgentRepo(repoPath, config.reposDir, agent.id, challenge.repo, challenge, wave);
       const mcpConfigPath = buildMcpConfig({
         auth: agent.auth,
         apiKey,
@@ -986,7 +1228,7 @@ async function runWave(opts: {
   for (const agent of agents) {
     const state = agentStates[agent.id];
     if (state) {
-      state.status = 'finished';
+      state.status = state.budgetExceeded ? 'throttled' : 'finished';
       state.currentChallenge = undefined;
       state.currentRepo = undefined;
     }
@@ -1183,6 +1425,7 @@ async function main() {
   console.log(`  Framing:        ${config.framing}`);
   console.log(`  Agents/tier:    ${agentsPerTierLabel}`);
   console.log(`  Parallel agents:${config.parallel}`);
+  console.log(`  Tool budget:    ${config.maxToolCalls}`);
   console.log(`  Agent sandbox:  ${config.sandboxAgents ? 'enabled' : 'disabled'}`);
   if (config.maxDifficulty) console.log(`  Max difficulty: ${config.maxDifficulty}/5`);
   if (config.challengeId) console.log(`  Challenge:      ${config.challengeId}`);
