@@ -18,8 +18,9 @@ CTF_QWEN_MODEL=${CTF_QWEN_MODEL:-qwen3:14b}
 mkdir -p "$(dirname "$LOG_FILE")" "$RESULTS_DIR"
 exec >>"$LOG_FILE" 2>&1
 
-load_inerrata_key() {
-  if [[ -n "${INERRATA_API_KEY:-}" ]]; then
+load_env_var() {
+  local var_name=$1
+  if [[ -n "${!var_name:-}" ]]; then
     return 0
   fi
 
@@ -28,27 +29,43 @@ load_inerrata_key() {
     return 1
   fi
 
-  local key_line
-  key_line=$(
-    sed -n -E 's/^(export[[:space:]]+)?INERRATA_API_KEY=(.*)$/\2/p' "$env_file" |
+  local value_line
+  value_line=$(
+    sed -n -E "s/^(export[[:space:]]+)?${var_name}=(.*)$/\\2/p" "$env_file" |
       head -n 1
   )
 
-  if [[ -z "$key_line" ]]; then
+  if [[ -z "$value_line" ]]; then
     return 1
   fi
 
-  key_line=${key_line%\"}
-  key_line=${key_line#\"}
-  key_line=${key_line%\'}
-  key_line=${key_line#\'}
-  export INERRATA_API_KEY=$key_line
+  value_line=${value_line%\"}
+  value_line=${value_line#\"}
+  value_line=${value_line%\'}
+  value_line=${value_line#\'}
+  export "$var_name=$value_line"
+}
+
+load_inerrata_key() {
+  if load_env_var INERRATA_API_KEY; then
+    return 0
+  fi
+
+  if load_env_var ERRATA_API_KEY; then
+    export INERRATA_API_KEY=$ERRATA_API_KEY
+    return 0
+  fi
+
+  return 1
 }
 
 if ! load_inerrata_key; then
   echo "[scoreboard] INERRATA_API_KEY is missing. Export it or add it to ~/.inerrata-env." >&2
   exit 1
 fi
+
+load_env_var INERRATA_ADMIN_SECRET || load_env_var CTF_GRAPH_CLEANUP_SECRET || load_env_var ADMIN_SECRET || true
+load_env_var INERRATA_API_URL || true
 
 export CTF_QWEN_MODEL
 export CTF_MAX_OUTPUT_TOKENS=$MAX_OUTPUT_TOKENS
@@ -90,6 +107,7 @@ echo "[scoreboard] Parallel: $PARALLEL"
 echo "[scoreboard] Max output tokens: $MAX_OUTPUT_TOKENS"
 echo "[scoreboard] Results: $RESULTS_DIR"
 echo "[scoreboard] Qwen model: $CTF_QWEN_MODEL"
+echo "[scoreboard] Graph cleanup auth: $([[ -n "${INERRATA_ADMIN_SECRET:-}${CTF_GRAPH_CLEANUP_SECRET:-}${ADMIN_SECRET:-}" ]] && echo enabled || echo missing)"
 
 cd "$PROJECT_ROOT"
 exec npx tsx "${args[@]}"

@@ -13,10 +13,16 @@ function response(body: unknown, ok = true, status = ok ? 200 : 500) {
 describe('CTF Cold-To-Warm Demo graph hooks', () => {
   const originalApiUrl = process.env.INERRATA_API_URL;
   const originalApiKey = process.env.INERRATA_API_KEY;
+  const originalAdminSecret = process.env.INERRATA_ADMIN_SECRET;
+  const originalCleanupSecret = process.env.CTF_GRAPH_CLEANUP_SECRET;
+  const originalGenericAdminSecret = process.env.ADMIN_SECRET;
 
   beforeEach(() => {
     process.env.INERRATA_API_URL = 'https://example.test';
     process.env.INERRATA_API_KEY = 'test-key';
+    delete process.env.INERRATA_ADMIN_SECRET;
+    delete process.env.CTF_GRAPH_CLEANUP_SECRET;
+    delete process.env.ADMIN_SECRET;
   });
 
   afterEach(() => {
@@ -24,6 +30,12 @@ describe('CTF Cold-To-Warm Demo graph hooks', () => {
     else process.env.INERRATA_API_URL = originalApiUrl;
     if (originalApiKey === undefined) delete process.env.INERRATA_API_KEY;
     else process.env.INERRATA_API_KEY = originalApiKey;
+    if (originalAdminSecret === undefined) delete process.env.INERRATA_ADMIN_SECRET;
+    else process.env.INERRATA_ADMIN_SECRET = originalAdminSecret;
+    if (originalCleanupSecret === undefined) delete process.env.CTF_GRAPH_CLEANUP_SECRET;
+    else process.env.CTF_GRAPH_CLEANUP_SECRET = originalCleanupSecret;
+    if (originalGenericAdminSecret === undefined) delete process.env.ADMIN_SECRET;
+    else process.env.ADMIN_SECRET = originalGenericAdminSecret;
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -75,7 +87,7 @@ describe('CTF Cold-To-Warm Demo graph hooks', () => {
   });
 
   describe('wipeCtfNodes', () => {
-    it('returns 0 when no API key is configured', async () => {
+    it('returns 0 when no cleanup auth is configured', async () => {
       const fetchMock = vi.fn();
       vi.stubGlobal('fetch', fetchMock);
 
@@ -87,6 +99,31 @@ describe('CTF Cold-To-Warm Demo graph hooks', () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ deletedCount: 12 })));
 
       await expect(wipeCtfNodes('test-key')).resolves.toBe(12);
+    });
+
+    it('sends admin secret when configured', async () => {
+      process.env.INERRATA_ADMIN_SECRET = 'admin-secret';
+      const fetchMock = vi.fn().mockResolvedValue(response({ deletedCount: 12 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      await expect(wipeCtfNodes('test-key')).resolves.toBe(12);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://example.test/api/v1/admin/graph/cleanup',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-key',
+            'X-Admin-Secret': 'admin-secret',
+            'Content-Type': 'application/json',
+          }),
+        }),
+      );
+    });
+
+    it('can use admin secret without an agent API key', async () => {
+      process.env.INERRATA_ADMIN_SECRET = 'admin-secret';
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ deletedCount: 3 })));
+
+      await expect(wipeCtfNodes('')).resolves.toBe(3);
     });
 
     it('returns -1 when admin cleanup endpoint is unavailable', async () => {

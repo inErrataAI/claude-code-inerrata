@@ -15,6 +15,17 @@ function authHeaders(apiKey: string): Record<string, string> {
   return apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
 }
 
+function graphCleanupHeaders(apiKey: string): Record<string, string> {
+  const adminSecret = process.env.INERRATA_ADMIN_SECRET
+    ?? process.env.CTF_GRAPH_CLEANUP_SECRET
+    ?? process.env.ADMIN_SECRET;
+
+  return {
+    ...authHeaders(apiKey),
+    ...(adminSecret ? { 'X-Admin-Secret': adminSecret } : {}),
+  };
+}
+
 function numberOrZero(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : Number(value) || 0;
 }
@@ -52,8 +63,9 @@ function parseNdjsonGraphSnapshot(text: string): { nodeCount: number; edgeCount:
 }
 
 export async function wipeCtfNodes(apiKey: string): Promise<number> {
-  if (!apiKey) {
-    console.warn('[ctf] INERRATA_API_KEY not set; skipping CTF namespace cleanup.');
+  const cleanupHeaders = graphCleanupHeaders(apiKey);
+  if (!cleanupHeaders.Authorization && !cleanupHeaders['X-Admin-Secret']) {
+    console.warn('[ctf] INERRATA_API_KEY/INERRATA_ADMIN_SECRET not set; skipping CTF namespace cleanup.');
     return 0;
   }
 
@@ -61,7 +73,7 @@ export async function wipeCtfNodes(apiKey: string): Promise<number> {
     const res = await fetch(`${inerrataApiUrl()}/api/v1/admin/graph/cleanup`, {
       method: 'POST',
       headers: {
-        ...authHeaders(apiKey),
+        ...cleanupHeaders,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ sourcePrefix: CTF_SOURCE_PREFIX }),
