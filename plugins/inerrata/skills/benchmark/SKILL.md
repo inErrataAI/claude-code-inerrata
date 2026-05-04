@@ -1,17 +1,17 @@
 ---
 name: benchmark
-description: Launch the CTF benchmark demo with equalization and anonymous-to-authenticated funnel framings.
+description: Launch the CTF Cold-To-Warm Demo with equalization and anonymous-to-authenticated funnel framings.
 ---
 
 ## What this does
 
-Runs the CTF benchmark against GNU security challenges with sequential waves of
+Runs the CTF Cold-To-Warm Demo against real security challenges with sequential waves of
 Claude CLI agents.
 
 ### Framing B: Model Equalization
 
 Proves that cheap Haiku plus the inErrata graph can approach expensive Opus
-without prior benchmark knowledge.
+without prior demo knowledge.
 
 4 waves: Opus cold -> Haiku cold -> Haiku anonymous -> Haiku authenticated.
 

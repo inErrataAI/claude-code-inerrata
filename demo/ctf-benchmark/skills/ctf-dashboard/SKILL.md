@@ -1,11 +1,11 @@
 ---
 name: ctf-dashboard
-description: Start the live CTF benchmark dashboard with real-time agent progress and scoring visualization.
+description: Start the live CTF Cold-To-Warm Demo dashboard with real-time agent progress and scoring visualization.
 ---
 
 # /ctf:dashboard
 
-Start the live CTF benchmark dashboard.
+Start the live CTF Cold-To-Warm Demo dashboard.
 
 ## Usage
 

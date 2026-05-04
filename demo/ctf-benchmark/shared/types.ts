@@ -1,13 +1,13 @@
 /**
  * shared/types.ts -- Single source of truth for all shared interfaces
- * in the GNU Security Audit CTF benchmark.
+ * in the CTF Cold-To-Warm Demo.
  */
 
 // ---------------------------------------------------------------------------
 // Core enums and unions
 // ---------------------------------------------------------------------------
 
-/** All model tiers used in the benchmark. */
+/** All model tiers used in the demo. */
 export type ModelTier = 'opus' | 'sonnet' | 'haiku' | 'qwen2.5-14b';
 
 /** Display model for a wave; mixed waves contain multiple concrete agent models. */
@@ -19,10 +19,10 @@ export type AgentRuntime = 'claude' | 'ollama';
 /** Display runtime for a wave; mixed waves contain multiple concrete runtimes. */
 export type WaveRuntime = AgentRuntime | 'mixed';
 
-/** inErrata access level for a benchmark wave. */
+/** inErrata access level for a demo wave. */
 export type AuthLevel = 'none' | 'anonymous' | 'authenticated';
 
-/** Benchmark story framing. */
+/** Demo story framing. */
 export type BenchmarkFraming = 'equalization' | 'funnel';
 
 /** Graph state visible to a wave. */
@@ -188,7 +188,7 @@ export interface AgentState {
   wave: number;
 }
 
-/** Wave tracking for framing-based benchmark runs. */
+/** Wave tracking for framing-based demo runs. */
 export interface Wave {
   number: number;
   label: string;

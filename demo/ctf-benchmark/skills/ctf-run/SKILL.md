@@ -1,11 +1,11 @@
 ---
 name: ctf-run
-description: Launch a GNU Security Audit CTF benchmark run with equalization or funnel framing.
+description: Launch a CTF Cold-To-Warm Demo run with equalization or funnel framing.
 ---
 
 # /ctf:run
 
-Launch the CTF benchmark where Claude CLI agents audit GNU C source for known
+Launch the CTF Cold-To-Warm Demo where Claude CLI agents audit C source for known
 CVEs across sequential graph-access waves.
 
 ## Usage

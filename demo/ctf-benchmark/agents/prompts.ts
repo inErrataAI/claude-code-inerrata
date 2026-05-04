@@ -1,5 +1,5 @@
 /**
- * agents/prompts.ts -- Auth-level-aware prompts for GNU security audit agents.
+ * agents/prompts.ts -- Auth-level-aware prompts for CTF Cold-To-Warm Demo agents.
  *
  * Findings are emitted as <finding>{JSON}</finding> blocks in agent output.
  */

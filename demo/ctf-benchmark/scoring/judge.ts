@@ -1,5 +1,5 @@
 /**
- * scoring/judge.ts -- Scoring engine for the GNU Security Audit CTF.
+ * scoring/judge.ts -- Scoring engine for the CTF Cold-To-Warm Demo.
  *
  * Evaluates agent findings against ground truth for each challenge.
  * Scores are a percentage of the challenge's max points, allocated:

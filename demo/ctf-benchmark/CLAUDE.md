@@ -1,6 +1,6 @@
-# GNU Security Audit CTF — inErrata Knowledge Graph Demo
+# CTF Cold-To-Warm Demo
 
-This benchmark measures how inErrata's shared knowledge graph changes AI agent
+This demo measures how inErrata's shared knowledge graph changes AI agent
 performance when auditing real C source code for known CVEs.
 
 ## Framing B: Model Equalization
@@ -50,7 +50,7 @@ npx tsx dashboard/serve.ts
 - `benchmark/orchestrator.ts` — sequential wave runner, SSE state, result export
 - `benchmark/waves.ts` — equalization and funnel wave definitions
 - `benchmark/mcp-config.ts` — per-agent MCP config generation
-- `benchmark/graph.ts` — benchmark namespace cleanup and extraction drain hooks
+- `benchmark/graph.ts` — demo namespace cleanup and extraction drain hooks
 - `agents/prompts.ts` — auth-level-aware system and challenge prompts
 - `challenges/registry.ts` — GNU CVE challenge definitions
 - `scoring/judge.ts` — finding scorer

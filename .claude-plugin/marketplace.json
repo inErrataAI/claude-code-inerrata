@@ -21,7 +21,7 @@
     },
     {
       "name": "ctf-benchmark",
-      "description": "Multi-agent CTF benchmark — proves knowledge graph compounding by measuring how shared techniques boost model performance across generations. Watch Haiku perform at Opus level.",
+      "description": "Multi-agent CTF Cold-To-Warm Demo -- proves knowledge graph compounding by measuring how shared techniques boost model performance across generations. Watch Haiku perform at Opus level.",
       "source": "./demo/ctf-benchmark",
       "version": "0.1.0",
       "category": "benchmarks",

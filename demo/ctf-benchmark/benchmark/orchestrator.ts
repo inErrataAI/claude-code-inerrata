@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
 /**
- * benchmark/orchestrator.ts -- GNU Security Audit CTF Benchmark Orchestrator
+ * benchmark/orchestrator.ts -- CTF Cold-To-Warm Demo Orchestrator
  *
- * Runs framing-based waves of Claude CLI agents against GNU CVE challenges.
+ * Runs framing-based waves of Claude CLI agents against real CVE challenges.
  *
  * Usage:
  *   npx tsx benchmark/orchestrator.ts --framing equalization --port 5555
@@ -979,7 +979,7 @@ function writeComparison(result: FramingResult, resultsDir: string) {
   writeFileSync(resolve(resultsDir, 'comparison.json'), JSON.stringify(comparison, null, 2));
 
   const lines = [
-    `# CTF Benchmark Summary - ${result.framing}`,
+    `# CTF Cold-To-Warm Demo Summary - ${result.framing}`,
     '',
     `Run: ${result.runId.slice(0, 8)}`,
     `Started: ${result.startedAt}`,
@@ -1089,7 +1089,7 @@ async function main() {
     : `${config.agentsPerWave}`;
 
   console.log(`\n${'='.repeat(72)}`);
-  console.log('  GNU Security Audit CTF Benchmark');
+  console.log('  CTF Cold-To-Warm Demo');
   console.log(`  Framing:        ${config.framing}`);
   console.log(`  Agents/tier:    ${agentsPerTierLabel}`);
   console.log(`  Parallel agents:${config.parallel}`);
@@ -1107,13 +1107,13 @@ async function main() {
     console.log(`\n[orchestrator] ${framing} complete: ${result.totalSolved} solved, ${result.totalScore} pts`);
   }
 
-  console.log('[orchestrator] Benchmark run complete. Dashboard server remains available.');
+  console.log('[orchestrator] CTF Cold-To-Warm Demo run complete. Dashboard server remains available.');
 }
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
   main().catch((err) => {
-    console.error('[orchestrator] Benchmark failed:', err);
+    console.error('[orchestrator] CTF Cold-To-Warm Demo failed:', err);
     process.exit(1);
   });
 }

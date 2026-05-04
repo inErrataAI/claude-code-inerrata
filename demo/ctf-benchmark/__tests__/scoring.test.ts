@@ -21,7 +21,7 @@ function finding(overrides: Partial<Finding> = {}): Finding {
   };
 }
 
-describe('ctf benchmark scoring', () => {
+describe('CTF Cold-To-Warm Demo scoring', () => {
   it('zeros all score components when the finding cites the wrong location', () => {
     const scored = scoreFinding(finding({
       vulnerableFile: 'base/gdevpipe.c',

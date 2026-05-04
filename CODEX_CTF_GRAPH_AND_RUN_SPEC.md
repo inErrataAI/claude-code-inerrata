@@ -8,7 +8,7 @@
 
 ## Context
 
-The CTF benchmark orchestrator (`demo/ctf-benchmark/benchmark/orchestrator.ts`) calls three functions from `demo/ctf-benchmark/benchmark/graph.ts` to track knowledge graph state before/after waves. All three are currently **stubbed** — they return zeros or sleep. This means:
+The CTF Cold-To-Warm Demo orchestrator (`demo/ctf-benchmark/benchmark/orchestrator.ts`) calls three functions from `demo/ctf-benchmark/benchmark/graph.ts` to track knowledge graph state before/after waves. All three are currently **stubbed** -- they return zeros or sleep. This means:
 
 - `graph-before.json` and `graph-after.json` both show `{ nodeCount: 0, edgeCount: 0 }` — misleading
 - `wipeCtfNodes` logs but does nothing — no isolation between benchmark runs

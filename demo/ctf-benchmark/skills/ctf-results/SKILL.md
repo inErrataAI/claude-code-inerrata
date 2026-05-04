@@ -1,11 +1,11 @@
 ---
 name: ctf-results
-description: Compare benchmark results across generations — findings, scores, solve rates, and the compounding improvement curve.
+description: Compare CTF Cold-To-Warm Demo results across generations -- findings, scores, solve rates, and the compounding improvement curve.
 ---
 
 # /ctf:results
 
-Compare benchmark results across generations.
+Compare CTF Cold-To-Warm Demo results across generations.
 
 ## Usage
 

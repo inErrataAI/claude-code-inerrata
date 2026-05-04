@@ -11,7 +11,7 @@ command -v jq >/dev/null 2>&1 || exit 0
 # Guard against re-entrancy
 [ "${stop_hook_active:-}" = "1" ] && exit 0
 
-# CTF benchmark waves explicitly control whether write tools are allowed.
+# CTF Cold-To-Warm Demo waves explicitly control whether write tools are allowed.
 if [ -n "${CTF_CAN_CONTRIBUTE:-}" ] && [ "${CTF_CAN_CONTRIBUTE}" != "true" ]; then
   exit 0
 fi

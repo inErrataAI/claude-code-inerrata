@@ -110,7 +110,7 @@ function isPortInUse(port: number): Promise<boolean> {
 // Group 1: Build
 // ---------------------------------------------------------------------------
 
-describe('CTF Benchmark: Build', { timeout: 60_000 }, () => {
+describe('CTF Cold-To-Warm Demo: Build', { timeout: 60_000 }, () => {
   let installSucceeded = false;
 
   beforeAll(() => {
@@ -148,7 +148,7 @@ describe('CTF Benchmark: Build', { timeout: 60_000 }, () => {
 // Group 2: Key Source Files Exist
 // ---------------------------------------------------------------------------
 
-describe('CTF Benchmark: Key Source Files', { timeout: 10_000 }, () => {
+describe('CTF Cold-To-Warm Demo: Key Source Files', { timeout: 10_000 }, () => {
   const sourceFiles = [
     'challenges/registry.ts',
     'scoring/judge.ts',
@@ -173,7 +173,7 @@ describe('CTF Benchmark: Key Source Files', { timeout: 10_000 }, () => {
 // Group 3: Framing CLI Smoke
 // ---------------------------------------------------------------------------
 
-describe('CTF Benchmark: Framing CLI', { timeout: 10_000 }, () => {
+describe('CTF Cold-To-Warm Demo: Framing CLI', { timeout: 10_000 }, () => {
   it('parses --framing equalization', () => {
     const config = parseConfig(['--framing', 'equalization', '--agents-per-wave', '2', '--port', '6000']);
     expect(config.framing).toBe('equalization');
@@ -213,7 +213,7 @@ describe('CTF Benchmark: Framing CLI', { timeout: 10_000 }, () => {
 // Group 4: Dashboard Lifecycle
 // ---------------------------------------------------------------------------
 
-describe('CTF Benchmark: Dashboard Lifecycle', { timeout: 15_000 }, () => {
+describe('CTF Cold-To-Warm Demo: Dashboard Lifecycle', { timeout: 15_000 }, () => {
   let dashProc: ChildProcess | null = null;
   let dashPort: number;
 
@@ -224,7 +224,7 @@ describe('CTF Benchmark: Dashboard Lifecycle', { timeout: 15_000 }, () => {
     }
   });
 
-  it('spawns, serves HTML with GNU SECURITY AUDIT, serves sprites.js, and shuts down cleanly', async () => {
+  it('spawns, serves HTML with CTF Cold-To-Warm Demo, serves sprites.js, and shuts down cleanly', async () => {
     dashPort = await getFreePort();
 
     const tsxBin = join(CTF_DIR, 'node_modules', '.bin', 'tsx');
@@ -241,9 +241,9 @@ describe('CTF Benchmark: Dashboard Lifecycle', { timeout: 15_000 }, () => {
     const rootRes = await pollUntilReady(base, 5000);
     expect(rootRes.ok).toBe(true);
 
-    // Verify response body contains "GNU SECURITY AUDIT"
+    // Verify response body contains the demo title.
     const html = await rootRes.text();
-    expect(html).toContain('GNU SECURITY AUDIT');
+    expect(html).toContain('CTF Cold-To-Warm Demo');
 
     // /sprites.js should return javascript content
     const spritesRes = await fetch(`${base}/sprites.js`);
@@ -269,7 +269,7 @@ describe('CTF Benchmark: Dashboard Lifecycle', { timeout: 15_000 }, () => {
 // Group 5: No Orphan Processes
 // ---------------------------------------------------------------------------
 
-describe('CTF Benchmark: No Orphan Processes', { timeout: 10_000 }, () => {
+describe('CTF Cold-To-Warm Demo: No Orphan Processes', { timeout: 10_000 }, () => {
   afterAll(async () => {
     await killAll();
   });

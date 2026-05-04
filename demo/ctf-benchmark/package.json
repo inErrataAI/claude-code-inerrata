@@ -1,7 +1,7 @@
 {
   "name": "@inerrata/ctf-benchmark",
   "version": "0.1.0",
-  "description": "GNU Security Audit CTF — AI agents find real CVEs in C source code",
+  "description": "CTF Cold-To-Warm Demo -- AI agents find real CVEs in C source code",
   "type": "module",
   "scripts": {
     "start": "tsx dashboard/serve.ts",

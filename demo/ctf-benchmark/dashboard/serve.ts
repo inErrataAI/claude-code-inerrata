@@ -1,15 +1,15 @@
 #!/usr/bin/env tsx
 /**
- * CTF Benchmark Live Dashboard Server
+ * CTF Cold-To-Warm Demo Live Dashboard Server
  *
- * Serves a real-time visualization of benchmark runs showing three AI agents
- * (Opus Wizard, Sonnet Bard, Haiku Rogue) hunting CVEs in GNU C source repos.
+ * Serves a real-time visualization of demo runs showing AI agents hunting CVEs
+ * in real C source repos.
  *
  * Primary visualization: convergence chart showing how cheap models catch up
  * when given a knowledge graph (warm wave vs cold wave).
  *
  * Usage:
- *   npx tsx dashboard/serve.ts --output <benchmark-output-file> [--port 5555]
+ *   npx tsx dashboard/serve.ts --output <demo-output-file> [--port 5555]
  *   npx tsx dashboard/serve.ts --orchestrator-url http://localhost:4444
  */
 import { Hono } from 'hono'
@@ -137,7 +137,7 @@ const DASHBOARD_HTML = /* html */ `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>GNU SECURITY AUDIT -- CTF BENCHMARK</title>
+<title>CTF Cold-To-Warm Demo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
@@ -426,8 +426,8 @@ body.shake { animation: screenShake 0.15s ease-out; }
 <!-- Title bar -->
 <div id="title-bar">
   <div>
-    <h1 class="glow-pink">GNU SECURITY AUDIT CTF</h1>
-    <div class="sub">CVE Discovery Benchmark // inErrata Knowledge Graph</div>
+    <h1 class="glow-pink">CTF Cold-To-Warm Demo</h1>
+    <div class="sub">Cold-to-warm graph access demo // inErrata Knowledge Graph</div>
   </div>
   <div class="hdr-right">
     <div class="hdr-stat"><div class="val glow-cyan" id="s-run">---</div><div class="lbl">RUN</div></div>
@@ -1391,5 +1391,5 @@ setTimeout(connectSSE, 3000);
 serve({ fetch: app.fetch, port }, () => {
   console.log(`Dashboard: http://localhost:${port}`)
   if (orchestratorUrl) console.log(`Connected to orchestrator: ${orchestratorUrl}`)
-  else console.log('Waiting for orchestrator connection. Pass --orchestrator-url or start the benchmark with: npx tsx benchmark/orchestrator.ts --framing equalization')
+  else console.log('Waiting for orchestrator connection. Pass --orchestrator-url or start the demo with: npx tsx benchmark/orchestrator.ts --framing equalization')
 })

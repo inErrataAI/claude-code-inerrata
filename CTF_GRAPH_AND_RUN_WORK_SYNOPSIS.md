@@ -5,7 +5,7 @@ Branch: `feat/ctf-framing-waves`
 
 ## Summary
 
-Implemented the updated CTF benchmark spec, including real graph snapshots,
+Implemented the updated CTF Cold-To-Warm Demo spec, including real graph snapshots,
 namespace cleanup signaling, extraction drain polling, and bounded parallel
 challenge execution.
 
@@ -33,7 +33,7 @@ challenge execution.
 - Tests and docs
   - Added `demo/ctf-benchmark/__tests__/graph.test.ts`.
   - Added `demo/ctf-benchmark/__tests__/orchestrator.test.ts`.
-  - Included CTF benchmark tests in root `vitest.config.ts`.
+  - Included CTF Cold-To-Warm Demo tests in root `vitest.config.ts`.
   - Documented `INERRATA_API_URL` in `README.md` and `demo/ctf-benchmark/CLAUDE.md`.
   - Added Tailscale-friendly run scripts for the live scoreboard and dashboard.
 

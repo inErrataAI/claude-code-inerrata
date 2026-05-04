@@ -10,7 +10,7 @@ function response(body: unknown, ok = true, status = ok ? 200 : 500) {
   } as Response;
 }
 
-describe('ctf benchmark graph hooks', () => {
+describe('CTF Cold-To-Warm Demo graph hooks', () => {
   const originalApiUrl = process.env.INERRATA_API_URL;
   const originalApiKey = process.env.INERRATA_API_KEY;
 

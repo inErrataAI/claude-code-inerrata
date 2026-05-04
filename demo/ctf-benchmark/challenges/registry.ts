@@ -1,5 +1,5 @@
 /**
- * challenges/registry.ts -- CVE challenge definitions for the GNU Security Audit CTF.
+ * challenges/registry.ts -- CVE challenge definitions for the CTF Cold-To-Warm Demo.
  *
  * Each challenge targets a real CVE in a real GNU/open-source C codebase.
  * Agents receive only the briefing (no spoilers). The groundTruth is used

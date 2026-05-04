@@ -1,5 +1,5 @@
 // ============================================================================
-// CTF Benchmark — Sprite Art & Animation Engine
+// CTF Cold-To-Warm Demo -- Sprite Art & Animation Engine
 // Retro arcade-style pixel art for Opus Wizard vs Haiku Rogue
 // Canvas 2D only, zero dependencies, ES module compatible
 // ============================================================================

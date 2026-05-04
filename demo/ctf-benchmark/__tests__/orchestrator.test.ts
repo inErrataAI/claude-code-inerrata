@@ -9,7 +9,7 @@ import {
 } from '../benchmark/orchestrator.js';
 import { CHALLENGES } from '../challenges/registry.js';
 
-describe('ctf benchmark orchestrator config', () => {
+describe('CTF Cold-To-Warm Demo orchestrator config', () => {
   it('parses --parallel', () => {
     expect(parseConfig(['--parallel', '7']).parallel).toBe(7);
   });

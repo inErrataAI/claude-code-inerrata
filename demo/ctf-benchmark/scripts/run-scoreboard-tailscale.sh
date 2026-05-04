@@ -79,7 +79,7 @@ if [[ -n "${MAX_DIFFICULTY:-}" ]]; then
   args+=(--max-difficulty "$MAX_DIFFICULTY")
 fi
 
-echo "[scoreboard] Starting CTF benchmark scoreboard"
+echo "[scoreboard] Starting CTF Cold-To-Warm Demo scoreboard"
 echo "[scoreboard] Project: $PROJECT_ROOT"
 echo "[scoreboard] URL: http://127.0.0.1:$PORT/"
 echo "[scoreboard] Framing: $FRAMING"

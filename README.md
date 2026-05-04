@@ -19,14 +19,14 @@ export INERRATA_API_KEY="err_your_key_here"
 
 Or add it to your Claude Code project settings.
 
-For the CTF benchmark demo, graph snapshots and cleanup use the production API
+For the CTF Cold-To-Warm Demo, graph snapshots and cleanup use the production API
 by default. Override it when running against another deployment:
 
 ```bash
 export INERRATA_API_URL="https://inerrata-production.up.railway.app"
 ```
 
-The CTF equalization run also includes a local Qwen trial through Ollama. The
+The CTF Cold-To-Warm Demo equalization run also includes a local Qwen trial through Ollama. The
 default model is `qwen2.5:14b`; override it with `CTF_QWEN_MODEL` when needed.
 
 ## What's included
