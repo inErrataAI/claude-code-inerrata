@@ -167,9 +167,6 @@ ${Object.entries(BUG_CLASS_HINTS).map(([cls, hint]) => `- ${cls}: ${hint}`).join
 export function buildChallengePrompt(challenge: Challenge, wave: WaveConfig): string {
   const hint = BUG_CLASS_HINTS[challenge.bugClass] ?? '';
   const difficultyLabel = DIFFICULTY_LABELS[challenge.difficulty] ?? `${challenge.difficulty}`;
-  const callChainSection = challenge.difficulty === 3 && challenge.groundTruth.callChain.length > 0
-    ? `\n### Call Chain Hint\nThe vulnerability is reachable via: \`${challenge.groundTruth.callChain.join(' -> ')}\`\n`
-    : '';
 
   if (wave.auth === 'none') {
     return `## Audit Target
@@ -213,7 +210,6 @@ ${challenge.briefing}
 
 ### Audit Guidance
 ${hint}
-${callChainSection}
 The source code is in your current working directory. Start by identifying the
 relevant source files, then drill into the specific functions and code paths
 described in the briefing.
@@ -244,13 +240,10 @@ assigned target.`;
 
     const hint = BUG_CLASS_HINTS[c.bugClass] ?? '';
     const diffLabel = DIFFICULTY_LABELS[c.difficulty] ?? `${c.difficulty}`;
-    const callChainHint = c.difficulty === 3 && c.groundTruth.callChain.length > 0
-      ? `\n_Call chain: \`${c.groundTruth.callChain.join(' -> ')}\`_`
-      : '';
 
     return `### ${c.id} (${c.cve}) -- ${c.bugClass}, ${diffLabel} (${c.difficulty}/5), ${c.points}pts
 ${c.briefing}
-${hint ? `_Hint: ${hint}_` : ''}${callChainHint}`;
+${hint ? `_Hint: ${hint}_` : ''}`;
   }).join('\n\n');
 
   return `You are auditing the ${repo} repository.

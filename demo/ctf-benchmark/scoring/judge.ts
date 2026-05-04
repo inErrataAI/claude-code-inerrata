@@ -11,8 +11,8 @@
  *   - Cross-repo   (10%): CWE/abstract class ref + other software ref + general mitigation
  */
 
-import type { Challenge, Finding, ScoredFinding } from '../shared/types.js';
-import { getChallengeById } from '../challenges/registry.js';
+import type { Finding, ScoredFinding, ScoringChallenge } from '../shared/types.js';
+import { getScoringChallengeById } from '../challenges/registry.private.js';
 import { basename } from 'path';
 
 // ---------------------------------------------------------------------------
@@ -108,7 +108,7 @@ function hasExploitationSteps(text: string): boolean {
  *   - Correct file basename: 0.6
  *   - Correct file + function name: 1.0
  */
-function scoreLocation(finding: Finding, challenge: Challenge): number {
+function scoreLocation(finding: Finding, challenge: ScoringChallenge): number {
   const findingBase = basename(finding.vulnerableFile);
   const truthBases = challenge.groundTruth.files.map(f => basename(f));
 
@@ -147,7 +147,7 @@ function scoreLocation(finding: Finding, challenge: Challenge): number {
  *   - Mentions CWE or bug class correctly: +30%
  *   - References specific code constructs from ground truth: +30%
  */
-function scoreExplanation(finding: Finding, challenge: Challenge): number {
+function scoreExplanation(finding: Finding, challenge: ScoringChallenge): number {
   if (!finding.explanation || finding.explanation.length < 10) return 0;
 
   let score = 0;
@@ -194,7 +194,7 @@ function scoreExplanation(finding: Finding, challenge: Challenge): number {
  *   - Describes exploitation steps (ordered list or sequential code): +25%
  *   - References specific input/payload: +25%
  */
-function scorePoc(finding: Finding, challenge: Challenge): number {
+function scorePoc(finding: Finding, challenge: ScoringChallenge): number {
   if (!finding.pocCode || finding.pocCode.length < 20) return 0;
 
   let score = 0;
@@ -246,7 +246,7 @@ function scorePoc(finding: Finding, challenge: Challenge): number {
  *   - References vulnerable function from ground truth: +35%
  *   - Contains defensive check pattern: +35%
  */
-function scorePatch(finding: Finding, challenge: Challenge): number {
+function scorePatch(finding: Finding, challenge: ScoringChallenge): number {
   if (!finding.patchSuggestion || finding.patchSuggestion.length < 10) return 0;
 
   let score = 0;
@@ -288,7 +288,7 @@ function scorePatch(finding: Finding, challenge: Challenge): number {
  *   - References other repos/software with similar issues: +30%
  *   - Proposes general mitigation strategy: +30%
  */
-function scoreCrossRepo(finding: Finding, challenge: Challenge): number {
+function scoreCrossRepo(finding: Finding, challenge: ScoringChallenge): number {
   if (!finding.crossRepoPattern || finding.crossRepoPattern.length < 20) return 0;
 
   let score = 0;
@@ -342,7 +342,7 @@ function scoreCrossRepo(finding: Finding, challenge: Challenge): number {
  * Returns absolute points (fractions of challenge max).
  */
 export function scoreFinding(finding: Finding): ScoredFinding {
-  const challenge = getChallengeById(finding.challengeId);
+  const challenge = getScoringChallengeById(finding.challengeId);
 
   if (!challenge) {
     return {
@@ -405,7 +405,7 @@ export function scoreAllFindings(findings: Finding[]): ScoredFinding[] {
  * Requires: location >= 60% of location allocation AND explanation >= 40% of explanation allocation.
  */
 export function isSolved(sf: ScoredFinding): boolean {
-  const challenge = getChallengeById(sf.challengeId);
+  const challenge = getScoringChallengeById(sf.challengeId);
   if (!challenge) return false;
 
   const maxPoints = challenge.points;

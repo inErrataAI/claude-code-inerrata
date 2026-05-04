@@ -14,7 +14,7 @@ import { randomUUID, randomBytes } from 'crypto';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
-import { spawn, execSync, execFileSync, exec, type ChildProcess } from 'child_process';
+import { spawn, execSync, execFileSync, exec, type ChildProcess, type SpawnOptions } from 'child_process';
 import { promisify } from 'util';
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
@@ -59,6 +59,7 @@ export interface BenchmarkConfig {
   timeoutMinutes: number;
   agentsPerWave: number;
   parallel: number;
+  sandboxAgents: boolean;
   maxDifficulty?: Difficulty;
   challengeId?: string;
 }
@@ -74,6 +75,7 @@ export function parseConfig(argv: string[] = process.argv.slice(2)): BenchmarkCo
       timeout: { type: 'string', default: '30' },
       'agents-per-wave': { type: 'string', default: '4' },
       parallel: { type: 'string', default: '4' },
+      'no-sandbox': { type: 'boolean', default: false },
       'max-difficulty': { type: 'string' },
       challenge: { type: 'string' },
     },
@@ -109,6 +111,7 @@ export function parseConfig(argv: string[] = process.argv.slice(2)): BenchmarkCo
     timeoutMinutes: parseInt(values.timeout!, 10),
     agentsPerWave,
     parallel,
+    sandboxAgents: !values['no-sandbox'] && process.env.CTF_AGENT_SANDBOX !== '0',
     maxDifficulty: maxDiff,
     challengeId: values.challenge,
   };
@@ -308,10 +311,67 @@ export function buildClaudeArgs(opts: {
     '--strict-mcp-config',
     '--max-turns', '35',
     '--mcp-config', opts.mcpConfigPath,
-    '--plugin-dir', PROJECT_ROOT,
     '--system-prompt', opts.systemPrompt,
     '-p', opts.challengePrompt,
   ];
+}
+
+const SANDBOX_WORKSPACE = '/tmp/ctf-workspace';
+const SANDBOX_MCP_CONFIG = '/tmp/ctf-mcp-config.json';
+
+function canRunBwrap(): boolean {
+  try {
+    execFileSync(process.env.CTF_BWRAP_BIN ?? 'bwrap', ['--version'], { stdio: 'ignore', timeout: 5_000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function buildAgentSandbox(opts: {
+  enabled: boolean;
+  repoPath: string;
+  mcpConfigPath: string;
+}): { command: string; args: string[]; cwd: string; mcpConfigPath: string; enabled: boolean } {
+  if (!opts.enabled || !canRunBwrap()) {
+    return {
+      command: '',
+      args: [],
+      cwd: opts.repoPath,
+      mcpConfigPath: opts.mcpConfigPath,
+      enabled: false,
+    };
+  }
+
+  const command = process.env.CTF_BWRAP_BIN ?? 'bwrap';
+  const args = [
+    '--die-with-parent',
+    '--ro-bind', '/', '/',
+    '--proc', '/proc',
+    '--dev', '/dev',
+    '--bind', '/tmp', '/tmp',
+    '--dir', SANDBOX_WORKSPACE,
+    '--bind', opts.repoPath, SANDBOX_WORKSPACE,
+    '--ro-bind', opts.mcpConfigPath, SANDBOX_MCP_CONFIG,
+  ];
+
+  if (process.env.HOME) {
+    args.push('--bind', process.env.HOME, process.env.HOME);
+  }
+
+  args.push(
+    '--tmpfs', PROJECT_ROOT,
+    '--setenv', 'CTF_AGENT_SANDBOX', '1',
+    '--chdir', SANDBOX_WORKSPACE,
+  );
+
+  return {
+    command,
+    args,
+    cwd: '/',
+    mcpConfigPath: SANDBOX_MCP_CONFIG,
+    enabled: true,
+  };
 }
 
 function spawnAuditAgent(opts: {
@@ -321,48 +381,53 @@ function spawnAuditAgent(opts: {
   challengePrompt: string;
   repoPath: string;
   mcpConfigPath: string;
+  sandboxAgents: boolean;
 }): ChildProcess {
+  const sandbox = buildAgentSandbox({
+    enabled: opts.sandboxAgents,
+    repoPath: opts.repoPath,
+    mcpConfigPath: opts.mcpConfigPath,
+  });
   const commonClaudeArgs = (includeModel: boolean): string[] => buildClaudeArgs({
     includeModel,
     modelId: opts.agent.modelId,
-    mcpConfigPath: opts.mcpConfigPath,
+    mcpConfigPath: sandbox.mcpConfigPath,
     systemPrompt: opts.systemPrompt,
     challengePrompt: opts.challengePrompt,
   });
-
-  if (opts.agent.runtime === 'ollama') {
-    return spawn('ollama', [
-      'launch',
-      'claude',
-      '--model', opts.agent.modelId,
-      '--',
-      ...commonClaudeArgs(false),
-    ], {
-      cwd: opts.repoPath,
-      env: {
-        ...process.env,
-        INERRATA_API_KEY: process.env.INERRATA_API_KEY ?? '',
-        CTF_WAVE_LABEL: opts.agent.waveLabel,
-        CTF_CAN_CONTRIBUTE: opts.agent.canContribute ? 'true' : 'false',
-        CTF_AGENT_SOURCE: `ctf-bench-${opts.wave.label}-${opts.agent.id}`,
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-  }
-
-  const args = commonClaudeArgs(true);
-
-  return spawn('claude', args, {
-    cwd: opts.repoPath,
+  const spawnOptions: SpawnOptions = {
+    cwd: sandbox.cwd,
     env: {
       ...process.env,
       INERRATA_API_KEY: process.env.INERRATA_API_KEY ?? '',
       CTF_WAVE_LABEL: opts.agent.waveLabel,
       CTF_CAN_CONTRIBUTE: opts.agent.canContribute ? 'true' : 'false',
       CTF_AGENT_SOURCE: `ctf-bench-${opts.wave.label}-${opts.agent.id}`,
+      CTF_AGENT_SANDBOX: sandbox.enabled ? '1' : '0',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  };
+
+  if (opts.agent.runtime === 'ollama') {
+    const command = 'ollama';
+    const args = [
+      'launch',
+      'claude',
+      '--model', opts.agent.modelId,
+      '--',
+      ...commonClaudeArgs(false),
+    ];
+    return sandbox.enabled
+      ? spawn(sandbox.command, [...sandbox.args, command, ...args], spawnOptions)
+      : spawn(command, args, spawnOptions);
+  }
+
+  const command = 'claude';
+  const args = commonClaudeArgs(true);
+
+  return sandbox.enabled
+    ? spawn(sandbox.command, [...sandbox.args, command, ...args], spawnOptions)
+    : spawn(command, args, spawnOptions);
 }
 
 export function parseStreamJson(raw: string): {
@@ -644,6 +709,7 @@ async function runAgentForChallenge(opts: {
     challengePrompt: buildChallengePrompt(challenge, agentWave),
     repoPath,
     mcpConfigPath: opts.mcpConfigPath,
+    sandboxAgents: config.sandboxAgents,
   });
 
   child.stderr?.on('data', (chunk: Buffer) => {
@@ -1093,6 +1159,7 @@ async function main() {
   console.log(`  Framing:        ${config.framing}`);
   console.log(`  Agents/tier:    ${agentsPerTierLabel}`);
   console.log(`  Parallel agents:${config.parallel}`);
+  console.log(`  Agent sandbox:  ${config.sandboxAgents ? 'enabled' : 'disabled'}`);
   if (config.maxDifficulty) console.log(`  Max difficulty: ${config.maxDifficulty}/5`);
   if (config.challengeId) console.log(`  Challenge:      ${config.challengeId}`);
   console.log(`  Challenges:     ${selectedChallenges.length}`);

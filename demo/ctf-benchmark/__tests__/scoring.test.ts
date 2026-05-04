@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { CHALLENGES } from '../challenges/registry.js';
+import { SCORING_CHALLENGES } from '../challenges/registry.private.js';
 import { scoreFinding } from '../scoring/judge.js';
 import type { Finding } from '../shared/types.js';
 
 function finding(overrides: Partial<Finding> = {}): Finding {
-  const challenge = CHALLENGES[0];
+  const challenge = SCORING_CHALLENGES[0];
   return {
     agentId: 'test-agent',
     challengeId: challenge.id,

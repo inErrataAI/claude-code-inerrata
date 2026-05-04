@@ -303,6 +303,16 @@ describe('Project Files', () => {
     const giPath = join(CTF_PLUGIN_DIR, '.gitignore');
     expect(existsSync(giPath)).toBe(true);
   });
+
+  it('public challenge registry does not contain scoring ground truth', () => {
+    const registryPath = join(CTF_PLUGIN_DIR, 'challenges', 'registry.ts');
+    const raw = readFileSync(registryPath, 'utf-8');
+    expect(raw).not.toContain('groundTruth:');
+    expect(raw).not.toContain('exploitVector:');
+    expect(raw).not.toContain('patchHint:');
+    expect(raw).not.toContain('callChain:');
+    expect(CHALLENGES[0]).not.toHaveProperty('groundTruth');
+  });
 });
 
 // ---------------------------------------------------------------------------

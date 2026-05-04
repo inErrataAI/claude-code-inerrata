@@ -60,18 +60,21 @@ export interface Challenge {
   difficulty: Difficulty;
   points: number;
   briefing: string;
-  groundTruth: {
-    files: string[];
-    functions: string[];
-    description: string;
-    exploitVector: string;
-    patchHint: string;
-    callChain: string[];
-    exploitComplexity: ExploitComplexity;
-    cweId: string;
-    affectedVersionRange: string;
-  };
 }
+
+export interface ChallengeGroundTruth {
+  files: string[];
+  functions: string[];
+  description: string;
+  exploitVector: string;
+  patchHint: string;
+  callChain: string[];
+  exploitComplexity: ExploitComplexity;
+  cweId: string;
+  affectedVersionRange: string;
+}
+
+export type ScoringChallenge = Challenge & { groundTruth: ChallengeGroundTruth };
 
 // ---------------------------------------------------------------------------
 // Agent configuration

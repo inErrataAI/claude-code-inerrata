@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { execFileSync } from 'child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import {
+  buildAgentSandbox,
   buildClaudeArgs,
   parseConfig,
   parseFindings,
@@ -8,6 +13,7 @@ import {
   runWithConcurrency,
 } from '../benchmark/orchestrator.js';
 import { CHALLENGES } from '../challenges/registry.js';
+import { SCORING_CHALLENGES } from '../challenges/registry.private.js';
 
 describe('CTF Cold-To-Warm Demo orchestrator config', () => {
   it('parses --parallel', () => {
@@ -30,7 +36,55 @@ describe('CTF Cold-To-Warm Demo orchestrator config', () => {
     expect(args).toContain('--strict-mcp-config');
     expect(args.slice(args.indexOf('--setting-sources'), args.indexOf('--setting-sources') + 2))
       .toEqual(['--setting-sources', 'project,local']);
-    expect(args).toContain('--plugin-dir');
+    expect(args).not.toContain('--plugin-dir');
+  });
+
+  it('uses the bubblewrap agent sandbox when enabled', () => {
+    const sandbox = buildAgentSandbox({
+      enabled: true,
+      repoPath: '/tmp/challenge-repo',
+      mcpConfigPath: '/tmp/agent-mcp.json',
+    });
+
+    expect(sandbox.enabled).toBe(true);
+    expect(sandbox.command).toBe('bwrap');
+    expect(sandbox.args).toContain('--tmpfs');
+    expect(sandbox.args.join(' ')).toContain('demo/ctf-benchmark');
+    expect(sandbox.args).toContain('/tmp/ctf-workspace');
+    expect(sandbox.mcpConfigPath).toBe('/tmp/ctf-mcp-config.json');
+  });
+
+  it('sandbox exposes only the challenge workspace from the demo tree', () => {
+    const repoDir = mkdtempSync(join(tmpdir(), 'ctf-workspace-'));
+    const mcpPath = join(repoDir, 'mcp.json');
+    writeFileSync(join(repoDir, 'marker.c'), 'int main(void) { return 0; }\n');
+    writeFileSync(mcpPath, '{"mcpServers":{}}\n');
+
+    try {
+      const sandbox = buildAgentSandbox({
+        enabled: true,
+        repoPath: repoDir,
+        mcpConfigPath: mcpPath,
+      });
+      if (!sandbox.enabled) return;
+
+      const publicRegistry = join(__dirname, '..', 'challenges', 'registry.ts');
+      const privateRegistry = join(__dirname, '..', 'challenges', 'registry.private.ts');
+      const check = [
+        'test -f marker.c',
+        `test ! -e ${JSON.stringify(publicRegistry)}`,
+        `test ! -e ${JSON.stringify(privateRegistry)}`,
+        `test -f ${JSON.stringify(sandbox.mcpConfigPath)}`,
+      ].join(' && ');
+
+      execFileSync(sandbox.command, [...sandbox.args, 'bash', '-lc', check], {
+        cwd: sandbox.cwd,
+        stdio: 'pipe',
+        timeout: 10_000,
+      });
+    } finally {
+      rmSync(repoDir, { recursive: true, force: true });
+    }
   });
 
   it('deduplicates stream-json assistant text from final result text', () => {
@@ -66,12 +120,13 @@ describe('CTF Cold-To-Warm Demo orchestrator config', () => {
 
   it('maps hidden cold challenge token to the active challenge id', () => {
     const challenge = CHALLENGES[0];
+    const scoringChallenge = SCORING_CHALLENGES[0];
     const findings = parseFindings(
       `<finding>
 {
   "challengeId": "current",
-  "vulnerableFile": "${challenge.groundTruth.files[0]}",
-  "vulnerableFunction": "${challenge.groundTruth.functions[0]}",
+  "vulnerableFile": "${scoringChallenge.groundTruth.files[0]}",
+  "vulnerableFunction": "${scoringChallenge.groundTruth.functions[0]}",
   "lineRange": [1, 2],
   "bugClass": "command-injection",
   "explanation": "A plausible issue exists in this code path."
