@@ -958,21 +958,25 @@ function renderComparisonPanel(state, lineData) {
   for (var wi = 0; wi < waves.length; wi++) {
     var wave = waves[wi];
     var score = 0, solved = 0, graph = 0;
+    var flags = state.flags || [];
     var scoreMap = wave.scores || {};
     for (var agentId in scoreMap) {
       var perChallenge = scoreMap[agentId] || {};
       for (var chId in perChallenge) {
         score += perChallenge[chId] || 0;
-        if ((perChallenge[chId] || 0) > 0) solved++;
       }
       var a = (state.agents || {})[agentId];
       if (a) graph += a.graphHits || 0;
+    }
+    for (var fi = 0; fi < flags.length; fi++) {
+      if (flags[fi].wave === wave.number) solved++;
     }
     html += '<div class="wave-card">'
       + '<div class="wave-title">' + esc(waveDisplay(wave)) + '</div>'
       + '<div class="wave-meta">MODEL ' + esc(String(wave.model || '').toUpperCase()) + ' / <span class="auth-badge">' + authLabel(wave.auth || wave.mode) + '</span></div>'
       + '<div class="wave-meta">GRAPH CALLS ' + graph + '</div>'
-      + '<div class="wave-score">' + score + ' PTS</div>'
+      + '<div class="wave-score">' + solved + ' FLAGS</div>'
+      + '<div class="wave-meta">' + score + ' PTS</div>'
       + '</div>';
   }
 
@@ -1096,8 +1100,8 @@ function renderAgents(state) {
       + '</div>';
 
     html += '<div class="agent-scores">';
-    html += '<div class="agent-score-block"><div class="agent-score-label">POINTS</div><div class="agent-score-val pts">' + (a.totalPoints || 0) + '</div></div>';
     html += '<div class="agent-score-block"><div class="agent-score-label">FLAGS</div><div class="agent-score-val flags">' + nFlags + '/' + totalCh + '</div></div>';
+    html += '<div class="agent-score-block"><div class="agent-score-label">POINTS</div><div class="agent-score-val pts">' + (a.totalPoints || 0) + '</div></div>';
     html += '<div class="agent-score-block"><div class="agent-score-label">TOOLS</div><div class="agent-score-val">' + (a.toolCalls || 0) + '</div></div>';
     if (a.graphHits > 0) {
       html += '<div class="agent-score-block"><div class="agent-score-label">GRAPH</div><div class="agent-score-val graph">' + a.graphHits + '</div></div>';

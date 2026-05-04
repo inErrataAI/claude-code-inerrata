@@ -4,7 +4,8 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { buildMcpConfig } from '../demo/ctf-benchmark/benchmark/mcp-config';
 import { EQUALIZATION_WAVES, FUNNEL_WAVES } from '../demo/ctf-benchmark/benchmark/waves';
-import { buildSystemPrompt } from '../demo/ctf-benchmark/agents/prompts';
+import { buildChallengePrompt, buildSystemPrompt } from '../demo/ctf-benchmark/agents/prompts';
+import { CHALLENGES } from '../demo/ctf-benchmark/challenges/registry';
 
 const REPO_ROOT = join(__dirname, '..');
 const MARKETPLACE_JSON = join(REPO_ROOT, '.claude-plugin', 'marketplace.json');
@@ -401,6 +402,29 @@ describe('CTF Framing Wave Contract', () => {
     const prompt = buildSystemPrompt(EQUALIZATION_WAVES[0]);
     expect(prompt).not.toMatch(/inErrata/i);
     expect(prompt).not.toMatch(/mcp__inerrata__/);
+  });
+
+  it('buildChallengePrompt with auth none hides CVE, bug class, and scoring hints', () => {
+    const challenge = CHALLENGES[0];
+    const prompt = buildChallengePrompt(challenge, EQUALIZATION_WAVES[0]);
+    expect(prompt).toContain('Challenge token');
+    expect(prompt).toContain('current');
+    expect(prompt).not.toContain(challenge.id);
+    expect(prompt).not.toContain(challenge.cve);
+    expect(prompt).not.toContain(challenge.bugClass);
+    expect(prompt).not.toContain(challenge.briefing);
+    expect(prompt).not.toMatch(/\*\*CVE:\*\*/);
+    expect(prompt).not.toMatch(/\*\*Bug class:\*\*/);
+    expect(prompt).not.toMatch(/\*\*Difficulty:\*\*/);
+    expect(prompt).not.toMatch(/\*\*Points:\*\*/);
+  });
+
+  it('buildChallengePrompt with graph access keeps search terms visible', () => {
+    const challenge = CHALLENGES[0];
+    const prompt = buildChallengePrompt(challenge, EQUALIZATION_WAVES[1]);
+    expect(prompt).toContain(challenge.id);
+    expect(prompt).toContain(challenge.cve);
+    expect(prompt).toContain(challenge.bugClass);
   });
 
   it('buildSystemPrompt with anonymous includes read-only tool list', () => {

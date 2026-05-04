@@ -63,6 +63,27 @@ describe('ctf benchmark orchestrator config', () => {
     expect(findings[0].lineRange).toEqual([123, 145]);
     expect(findings[0].bugClass).toBe(challenge.bugClass);
   });
+
+  it('maps hidden cold challenge token to the active challenge id', () => {
+    const challenge = CHALLENGES[0];
+    const findings = parseFindings(
+      `<finding>
+{
+  "challengeId": "current",
+  "vulnerableFile": "${challenge.groundTruth.files[0]}",
+  "vulnerableFunction": "${challenge.groundTruth.functions[0]}",
+  "lineRange": [1, 2],
+  "bugClass": "command-injection",
+  "explanation": "A plausible issue exists in this code path."
+}
+</finding>`,
+      'cold-agent',
+      challenge,
+    );
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0].challengeId).toBe(challenge.id);
+  });
 });
 
 describe('runWithConcurrency', () => {

@@ -135,11 +135,11 @@ For each vulnerability you find, emit this exact block:
 
 <finding>
 {
-  "challengeId": "the-challenge-id",
+  "challengeId": "the-challenge-id-or-current",
   "vulnerableFile": "path/to/file.c",
   "vulnerableFunction": "function_name",
   "lineRange": [start_line, end_line],
-  "bugClass": "bug-class-from-briefing",
+  "bugClass": "your-best-estimate",
   "explanation": "Clear explanation of the vulnerability, how the bug works, and why it is exploitable",
   "pocCode": "// C code or shell commands demonstrating the exploit",
   "patchSuggestion": "Description or diff of how to fix the vulnerability",
@@ -171,9 +171,28 @@ export function buildChallengePrompt(challenge: Challenge, wave: WaveConfig): st
     ? `\n### Call Chain Hint\nThe vulnerability is reachable via: \`${challenge.groundTruth.callChain.join(' -> ')}\`\n`
     : '';
 
-  const graphInstruction = wave.auth === 'none'
-    ? ''
-    : `### Graph First Step
+  if (wave.auth === 'none') {
+    return `## Audit Target
+**Repository:** ${challenge.repo} (version: ${challenge.affectedVersion})
+**Challenge token:** current
+
+### Objective
+A security vulnerability exists in this version. Audit the local source tree and
+identify the most plausible vulnerable file, function, and code path using only
+the repository contents available in your working directory.
+
+Do not rely on public advisory memory, web lookups, CVE identifiers, or external
+vulnerability databases. Treat this as a blind source audit.
+
+When you find the vulnerability, emit a <finding> block. Use "current" as the
+challengeId and your best estimate for bugClass.
+
+Budget your turns: roughly 20 for navigation, 5 for output.
+
+Begin your audit now.`;
+  }
+
+  const graphInstruction = `### Graph First Step
 Before attempting this challenge, search inErrata for prior knowledge:
 - search("${challenge.cve}") or search("${challenge.bugClass} ${challenge.repo}")
 - If results are relevant, use burst and explore to inspect connected context.
@@ -210,11 +229,19 @@ export function buildRepoChallengesPrompt(challenges: Challenge[], wave?: WaveCo
 
   const repo = challenges[0].repo;
   const sorted = [...challenges].sort((a, b) => a.difficulty - b.difficulty || a.points - b.points);
+  const blindMode = wave?.auth === 'none';
   const graphInstruction = wave && wave.auth !== 'none'
     ? `Before each challenge, search inErrata for the CVE, repository, and vulnerability class.\n\n`
     : '';
 
   const challengeList = sorted.map(c => {
+    if (blindMode) {
+      return `### Audit target: ${c.repo} ${c.affectedVersion}
+A security vulnerability exists in this version. Audit the local source tree and
+emit a <finding> block using "current" as challengeId if this is the only
+assigned target.`;
+    }
+
     const hint = BUG_CLASS_HINTS[c.bugClass] ?? '';
     const diffLabel = DIFFICULTY_LABELS[c.difficulty] ?? `${c.difficulty}`;
     const callChainHint = c.difficulty === 3 && c.groundTruth.callChain.length > 0

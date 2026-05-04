@@ -480,12 +480,24 @@ export function parseFindings(output: string, agentId: string, challenge?: Chall
   const findingRegex = /<finding>\s*([\s\S]*?)\s*<\/finding>/g;
   let match: RegExpExecArray | null;
 
+  const resolveChallengeId = (value: unknown): string => {
+    if (typeof value !== 'string' || value.trim() === '') return challenge?.id ?? '';
+    const normalized = value.trim().toLowerCase();
+    if (
+      challenge &&
+      ['current', 'current_challenge', 'current-challenge', 'the-challenge-id'].includes(normalized)
+    ) {
+      return challenge.id;
+    }
+    return value;
+  };
+
   while ((match = findingRegex.exec(output)) !== null) {
     try {
       const raw = JSON.parse(match[1]);
       findings.push({
         agentId,
-        challengeId: raw.challengeId ?? '',
+        challengeId: resolveChallengeId(raw.challengeId),
         timestamp: Date.now(),
         vulnerableFile: raw.vulnerableFile ?? '',
         vulnerableFunction: raw.vulnerableFunction,

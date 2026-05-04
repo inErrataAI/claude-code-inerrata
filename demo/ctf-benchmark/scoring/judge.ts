@@ -355,6 +355,13 @@ export function scoreFinding(finding: Finding): ScoredFinding {
 
   // Compute fractional scores (0-1)
   const locFrac = scoreLocation(finding, challenge);
+  if (locFrac === 0) {
+    return {
+      ...finding,
+      scores: { location: 0, explanation: 0, poc: 0, patch: 0, crossRepo: 0, total: 0 },
+    };
+  }
+
   const explFrac = scoreExplanation(finding, challenge);
   const pocFrac = scorePoc(finding, challenge);
   const patchFrac = scorePatch(finding, challenge);
