@@ -430,6 +430,11 @@ export function buildAgentSandbox(opts: {
         projectRootMasked = true;
       }
     }
+
+    const ollamaStatePath = resolve(home, '.ollama');
+    if (existsSync(ollamaStatePath)) {
+      args.push('--bind', ollamaStatePath, ollamaStatePath);
+    }
   }
 
   if (!projectRootMasked) {

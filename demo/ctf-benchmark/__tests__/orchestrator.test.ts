@@ -74,6 +74,16 @@ describe('CTF Cold-To-Warm Demo orchestrator config', () => {
       );
       expect(homeBindIndex).toBe(-1);
       expect(sandbox.args.join(' ')).toContain(`${process.env.HOME}/Repos`);
+
+      const ollamaStatePath = join(process.env.HOME, '.ollama');
+      if (existsSync(ollamaStatePath)) {
+        const ollamaBindIndex = sandbox.args.findIndex((arg, index) =>
+          arg === '--bind'
+          && sandbox.args[index + 1] === ollamaStatePath
+          && sandbox.args[index + 2] === ollamaStatePath,
+        );
+        expect(ollamaBindIndex).toBeGreaterThanOrEqual(0);
+      }
     }
   });
 
