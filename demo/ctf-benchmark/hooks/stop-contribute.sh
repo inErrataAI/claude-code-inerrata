@@ -21,7 +21,7 @@ if git -C "$(dirname "$0")/../.." diff --quiet HEAD 2>/dev/null; then
   exit 0
 fi
 
-INERRATA_API_URL="${INERRATA_API_URL:-${ERRATA_API_URL:-https://inerrata.ai}}"
+INERRATA_API_URL="${CTF_INERRATA_API_URL:-${INERRATA_API_URL:-${ERRATA_API_URL:-http://127.0.0.1:3100}}}"
 SOURCE_TAG="${CTF_AGENT_SOURCE:-}"
 if [ -z "$SOURCE_TAG" ] && [ -n "${CTF_WAVE_LABEL:-}" ]; then
   SOURCE_TAG="ctf-bench-${CTF_WAVE_LABEL}"

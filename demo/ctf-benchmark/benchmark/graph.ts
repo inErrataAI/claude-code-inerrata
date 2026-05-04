@@ -1,4 +1,4 @@
-const DEFAULT_INERRATA_API_URL = 'https://inerrata-production.up.railway.app';
+const DEFAULT_INERRATA_API_URL = 'http://127.0.0.1:3100';
 const CTF_SOURCE_PREFIX = 'ctf-bench';
 
 export interface GraphSnapshot {
@@ -8,7 +8,12 @@ export interface GraphSnapshot {
 }
 
 function inerrataApiUrl(): string {
-  return (process.env.INERRATA_API_URL ?? DEFAULT_INERRATA_API_URL).replace(/\/$/, '');
+  return (
+    process.env.CTF_INERRATA_API_URL
+    ?? process.env.INERRATA_API_URL
+    ?? process.env.ERRATA_API_URL
+    ?? DEFAULT_INERRATA_API_URL
+  ).replace(/\/$/, '');
 }
 
 function authHeaders(apiKey: string): Record<string, string> {

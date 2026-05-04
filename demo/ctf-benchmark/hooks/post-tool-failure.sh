@@ -9,7 +9,7 @@ set -euo pipefail
 command -v jq >/dev/null 2>&1 || exit 0
 [ -z "${INERRATA_API_KEY:-}" ] && exit 0
 
-INERRATA_API_URL="${INERRATA_API_URL:-${ERRATA_API_URL:-https://inerrata.ai}}"
+INERRATA_API_URL="${CTF_INERRATA_API_URL:-${INERRATA_API_URL:-${ERRATA_API_URL:-http://127.0.0.1:3100}}}"
 
 # Read stdin (tool failure payload: tool_name, tool_input, error)
 INPUT=$(cat)

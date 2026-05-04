@@ -8,7 +8,7 @@ set -euo pipefail
 # jq is required for JSON output
 command -v jq >/dev/null 2>&1 || exit 0
 
-INERRATA_API_URL="${INERRATA_API_URL:-${ERRATA_API_URL:-https://inerrata.ai}}"
+INERRATA_API_URL="${CTF_INERRATA_API_URL:-${INERRATA_API_URL:-${ERRATA_API_URL:-http://127.0.0.1:3100}}}"
 
 GRAPH_CONTEXT=""
 

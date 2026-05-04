@@ -14,6 +14,7 @@ RUN_STAMP=${RUN_STAMP:-$(date +%Y%m%d-%H%M%S)}
 RESULTS_DIR=${RESULTS_DIR:-"$PROJECT_ROOT/results/live-scoreboard-$RUN_STAMP"}
 LOG_FILE=${LOG_FILE:-"$PROJECT_ROOT/results/run-logs/benchmark-$RUN_STAMP.log"}
 CTF_QWEN_MODEL=${CTF_QWEN_MODEL:-qwen3:14b}
+DEFAULT_CTF_INERRATA_API_URL=${DEFAULT_CTF_INERRATA_API_URL:-http://127.0.0.1:3100}
 
 mkdir -p "$(dirname "$LOG_FILE")" "$RESULTS_DIR"
 exec >>"$LOG_FILE" 2>&1
@@ -59,16 +60,61 @@ load_inerrata_key() {
   return 1
 }
 
-if ! load_inerrata_key; then
-  echo "[scoreboard] INERRATA_API_KEY is missing. Export it or add it to ~/.inerrata-env." >&2
-  exit 1
+is_local_url() {
+  local url=$1
+  [[ "$url" =~ ^https?://(127\.0\.0\.1|localhost|\[::1\])(:|/|$) ]]
+}
+
+validate_inerrata_key() {
+  [[ -n "${INERRATA_API_KEY:-}" ]] || return 1
+  curl -fsS --max-time 5 \
+    -H "Authorization: Bearer ${INERRATA_API_KEY}" \
+    "${INERRATA_API_URL}/api/v1/me" >/dev/null 2>&1
+}
+
+provision_local_inerrata_key() {
+  local handle="ctf-local-${RUN_STAMP}-${RANDOM}"
+  local response
+  response=$(
+    curl -fsS --max-time 10 \
+      -X POST "${INERRATA_API_URL}/api/v1/agents/register" \
+      -H 'Content-Type: application/json' \
+      -d "{\"handle\":\"${handle}\"}"
+  )
+
+  local api_key
+  api_key=$(
+    node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync(0,'utf8')); if (!data.apiKey) process.exit(1); process.stdout.write(data.apiKey)" \
+      <<<"$response"
+  )
+  export INERRATA_API_KEY=$api_key
+  echo "[scoreboard] Provisioned local CTF API key for ${handle}."
+}
+
+load_env_var CTF_INERRATA_API_URL || load_env_var INERRATA_API_URL || load_env_var ERRATA_API_URL || true
+export INERRATA_API_URL="${CTF_INERRATA_API_URL:-${INERRATA_API_URL:-${ERRATA_API_URL:-$DEFAULT_CTF_INERRATA_API_URL}}}"
+INERRATA_API_URL=${INERRATA_API_URL%/}
+export INERRATA_API_URL
+
+load_env_var CTF_INERRATA_MCP_URL || load_env_var INERRATA_MCP_URL || load_env_var ERRATA_MCP_URL || true
+export INERRATA_MCP_URL="${CTF_INERRATA_MCP_URL:-${INERRATA_MCP_URL:-${ERRATA_MCP_URL:-${INERRATA_API_URL}/mcp}}}"
+INERRATA_MCP_URL=${INERRATA_MCP_URL%/}
+export INERRATA_MCP_URL
+
+if [[ "${CTF_ALLOW_REMOTE_INERRATA:-0}" != "1" ]]; then
+  if ! is_local_url "$INERRATA_API_URL" || ! is_local_url "$INERRATA_MCP_URL"; then
+    echo "[scoreboard] Refusing remote inErrata endpoint for local CTF run." >&2
+    echo "[scoreboard] API=$INERRATA_API_URL MCP=$INERRATA_MCP_URL" >&2
+    echo "[scoreboard] Set CTF_ALLOW_REMOTE_INERRATA=1 only for an intentional remote run." >&2
+    exit 1
+  fi
 fi
 
 load_env_var INERRATA_ADMIN_SECRET || load_env_var CTF_GRAPH_CLEANUP_SECRET || load_env_var ADMIN_SECRET || load_env_var INERRATA_ADMIN_PASS || true
-load_env_var INERRATA_API_URL || true
+if is_local_url "$INERRATA_API_URL" && [[ -z "${INERRATA_ADMIN_SECRET:-}${CTF_GRAPH_CLEANUP_SECRET:-}${ADMIN_SECRET:-}${INERRATA_ADMIN_PASS:-}" ]]; then
+  export INERRATA_ADMIN_SECRET=ctf-admin-secret
+fi
 
-export CTF_QWEN_MODEL
-export CTF_MAX_OUTPUT_TOKENS=$MAX_OUTPUT_TOKENS
 
 if [[ -x "$HOME/.local/share/fnm/fnm" ]]; then
   eval "$("$HOME/.local/share/fnm/fnm" env --shell bash)"
@@ -79,6 +125,19 @@ node -e 'if (!globalThis.Request) process.exit(1)' || {
   echo "[scoreboard] Install/use Node 18+ before starting the dashboard." >&2
   exit 1
 }
+
+load_inerrata_key || true
+if is_local_url "$INERRATA_API_URL"; then
+  if ! validate_inerrata_key; then
+    provision_local_inerrata_key
+  fi
+elif [[ -z "${INERRATA_API_KEY:-}" ]]; then
+  echo "[scoreboard] INERRATA_API_KEY is missing for remote inErrata endpoint." >&2
+  exit 1
+fi
+
+export CTF_QWEN_MODEL
+export CTF_MAX_OUTPUT_TOKENS=$MAX_OUTPUT_TOKENS
 
 args=(
   benchmark/orchestrator.ts
@@ -107,6 +166,8 @@ echo "[scoreboard] Parallel: $PARALLEL"
 echo "[scoreboard] Max output tokens: $MAX_OUTPUT_TOKENS"
 echo "[scoreboard] Results: $RESULTS_DIR"
 echo "[scoreboard] Qwen model: $CTF_QWEN_MODEL"
+echo "[scoreboard] inErrata API: $INERRATA_API_URL"
+echo "[scoreboard] inErrata MCP: $INERRATA_MCP_URL"
 echo "[scoreboard] Graph cleanup auth: $([[ -n "${INERRATA_ADMIN_SECRET:-}${CTF_GRAPH_CLEANUP_SECRET:-}${ADMIN_SECRET:-}${INERRATA_ADMIN_PASS:-}" ]] && echo enabled || echo missing)"
 
 cd "$PROJECT_ROOT"

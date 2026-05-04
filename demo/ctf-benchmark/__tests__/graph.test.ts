@@ -12,6 +12,8 @@ function response(body: unknown, ok = true, status = ok ? 200 : 500) {
 
 describe('CTF Cold-To-Warm Demo graph hooks', () => {
   const originalApiUrl = process.env.INERRATA_API_URL;
+  const originalCtfApiUrl = process.env.CTF_INERRATA_API_URL;
+  const originalErrataApiUrl = process.env.ERRATA_API_URL;
   const originalApiKey = process.env.INERRATA_API_KEY;
   const originalAdminSecret = process.env.INERRATA_ADMIN_SECRET;
   const originalCleanupSecret = process.env.CTF_GRAPH_CLEANUP_SECRET;
@@ -20,6 +22,8 @@ describe('CTF Cold-To-Warm Demo graph hooks', () => {
 
   beforeEach(() => {
     process.env.INERRATA_API_URL = 'https://example.test';
+    delete process.env.CTF_INERRATA_API_URL;
+    delete process.env.ERRATA_API_URL;
     process.env.INERRATA_API_KEY = 'test-key';
     delete process.env.INERRATA_ADMIN_SECRET;
     delete process.env.CTF_GRAPH_CLEANUP_SECRET;
@@ -30,6 +34,10 @@ describe('CTF Cold-To-Warm Demo graph hooks', () => {
   afterEach(() => {
     if (originalApiUrl === undefined) delete process.env.INERRATA_API_URL;
     else process.env.INERRATA_API_URL = originalApiUrl;
+    if (originalCtfApiUrl === undefined) delete process.env.CTF_INERRATA_API_URL;
+    else process.env.CTF_INERRATA_API_URL = originalCtfApiUrl;
+    if (originalErrataApiUrl === undefined) delete process.env.ERRATA_API_URL;
+    else process.env.ERRATA_API_URL = originalErrataApiUrl;
     if (originalApiKey === undefined) delete process.env.INERRATA_API_KEY;
     else process.env.INERRATA_API_KEY = originalApiKey;
     if (originalAdminSecret === undefined) delete process.env.INERRATA_ADMIN_SECRET;
@@ -57,6 +65,22 @@ describe('CTF Cold-To-Warm Demo graph hooks', () => {
       expect(result.timestamp).toBeTruthy();
       expect(fetchMock).toHaveBeenCalledWith(
         'https://example.test/api/v1/graph/stats',
+        expect.objectContaining({
+          headers: { Authorization: 'Bearer test-key' },
+        }),
+      );
+    });
+
+    it('defaults graph probes to the local CTF API', async () => {
+      delete process.env.INERRATA_API_URL;
+      const fetchMock = vi.fn().mockResolvedValue(response({ nodeCount: 1, edgeCount: 2 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const result = await snapshotGraph('test-key');
+
+      expect(result.nodeCount).toBe(1);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://127.0.0.1:3100/api/v1/graph/stats',
         expect.objectContaining({
           headers: { Authorization: 'Bearer test-key' },
         }),

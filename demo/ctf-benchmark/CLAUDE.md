@@ -59,9 +59,11 @@ npx tsx dashboard/serve.ts
 ## Environment
 
 - `INERRATA_API_KEY` for authenticated waves
+- `CTF_INERRATA_API_URL` to override the local CTF API (defaults to `http://127.0.0.1:3100`)
+- `CTF_INERRATA_MCP_URL` to override the local MCP endpoint (defaults to `$CTF_INERRATA_API_URL/mcp`)
 - `CTF_QWEN_MODEL` or `OLLAMA_QWEN_MODEL` to override the local Qwen model (defaults to `qwen3:14b`)
 - `CTF_MAX_OUTPUT_TOKENS` or `MAX_OUTPUT_TOKENS` to tune Claude Code subprocess visible output headroom (defaults to `8192`)
-- Network access to `mcp.inerrata.ai`
+- Local CTF API stack from `/home/bosh/inErrata/scripts/ctf/targets/docker-compose.ctf.yml`
 - `claude` CLI installed and authenticated
 - `ollama` CLI installed with `qwen3:14b` pulled for the local Qwen trial
 - Node.js 22+
