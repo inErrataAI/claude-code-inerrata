@@ -6,6 +6,11 @@ repos/
 # Temp MCP configs generated per-agent
 .mcp-*.json
 
+# Secrets (never commit local Azure / OpenAI / inErrata credentials)
+.env
+.env.*
+!.env.example
+
 # OS
 .DS_Store
 Thumbs.db

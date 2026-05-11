@@ -152,7 +152,7 @@ describe('CTF Cold-To-Warm Demo orchestrator config', () => {
     expect(artifactChallengeId(challenge, warmWave)).toBe(challenge.id);
   });
 
-  it('disqualifies cold runs for over-budget or external lookup tool use', () => {
+  it('disqualifies cold runs only for over-budget or graph access (web is a metric, not a gate)', () => {
     const coldWave: WaveConfig = {
       number: 1,
       label: 'cold',
@@ -173,15 +173,24 @@ describe('CTF Cold-To-Warm Demo orchestrator config', () => {
       maxToolCalls: 12,
     })).toContain('tool-budget-exceeded:13/12');
 
+    // Cold wave that touches the graph is still disqualified (graph access
+    // is the definition of "warm").
     expect(runDisqualificationReasons({
-      toolCalls: ['WebSearch'],
+      toolCalls: ['mcp__inerrata__search'],
       classified: { graphHits: 1 },
       wave: coldWave,
       maxToolCalls: 12,
-    })).toEqual([
-      'graph-tool-used-in-cold-wave',
-      'external-lookup-tool-used-in-cold-wave',
-    ]);
+    })).toEqual(['graph-tool-used-in-cold-wave']);
+
+    // Cold wave that web-searches is NOT disqualified -- web usage is
+    // tracked as a metric so we can compare cold-debugging cost vs
+    // graph-recall cost across waves.
+    expect(runDisqualificationReasons({
+      toolCalls: ['WebSearch'],
+      classified: { graphHits: 0 },
+      wave: coldWave,
+      maxToolCalls: 12,
+    })).toEqual([]);
   });
 
   it('sandbox exposes only the challenge workspace from the demo tree', () => {

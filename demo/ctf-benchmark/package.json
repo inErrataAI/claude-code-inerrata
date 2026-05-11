@@ -15,7 +15,9 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.0.0",
-    "hono": "^4.7.0"
+    "google-auth-library": "^10.6.2",
+    "hono": "^4.7.0",
+    "openai": "^4.104.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
