@@ -409,11 +409,9 @@ async function runWebFetch(args: Record<string, unknown>): Promise<string> {
     });
     const ct = res.headers.get('content-type') || '';
     let body = await res.text();
-    // Strip HTML tags / scripts / styles for readability; preserve text only.
+    // Strip HTML tags for readability; preserve text only.
     if (/html|xml/i.test(ct) || /^<!doctype html|<html/i.test(body)) {
       body = body
-        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
         .replace(/<!--[\s\S]*?-->/g, ' ')
         .replace(/<[^>]+>/g, ' ')
         .replace(/&nbsp;/gi, ' ')
